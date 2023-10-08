@@ -51,6 +51,7 @@ bot.command("showlinks", (ctx) => {
           myLinks.push({
             url: row.url,
             hash: "",
+            //newAdUrl: "",
             chatId: ctx.message.chat.id,
           });
         });
@@ -83,6 +84,7 @@ bot.command("deletelink", (ctx) => {
           myLinks.push({
             url: row.url,
             hash: "",
+            //newAdUrl: "",
             chatId: ctx.message.chat.id,
           });
         });
@@ -153,26 +155,26 @@ bot.command("start", (ctx) => {
           searches.push({
             url: row.url,
             hash: "",
+            //newAdUrl: "",
             chatId: ctx.message.chat.id,
           });
         });
       }
   //
   console.log("sitesToCrawl: " + JSON.stringify(searches));
-  // take urls from searches array and generate hash for each url
-  let sitesWithHash;
+
+  // Generate INITIAL hashes for each URL
   Promise.all(searches.map(async (site) => {
     const topResultsString = await generateTopResultsString(site.url);
+    //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
     site.hash = checksum(topResultsString);    
     return site;
-  })).then (values => {
-    sitesWithHash = values;
-  });
+  }));
 
   // 600000ms = 10 minutes
   intervalId = setInterval( () => {
-  if (sitesWithHash) {
-    checkURLs(sitesWithHash);
+  if (searches) {
+    checkURLs(searches);
   } else {
     ctx.reply(`Please add URLs with command "/addlink <url>"!`);
   }

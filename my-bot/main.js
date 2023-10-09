@@ -41,7 +41,7 @@ bot.command("showlinks", (ctx) => {
   // )
   const myLinks = [];
 
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
       if (err) {
@@ -74,7 +74,7 @@ bot.command("showlinks", (ctx) => {
 bot.command("deletelink", (ctx) => {
   const index = parseInt(ctx.message.text.split(" ")[1]);
   const myLinks = [];
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
       if (err) {
@@ -93,7 +93,7 @@ bot.command("deletelink", (ctx) => {
   //check if index is valid
   if (index && (index <= myLinks.length)) {
     //delete from database
-    let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+    let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
     // query database to delete link by index which is an order number in the list of links for a specific chatid, not urlid. And delete from searches array
     db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.message.chat.id} LIMIT 1 OFFSET ${index - 1})`);
     //searches.splice(index - 1, 1);
@@ -115,7 +115,7 @@ bot.command("addlink", async (ctx) => {
     return;
   }
   //check if url is already in the database
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
     if (err) {
       console.log(err);
@@ -144,7 +144,7 @@ bot.command("start", (ctx) => {
   ctx.reply("🕵 Started Ad-Patrol...")
   console.log('🕵 Started Ad-Patrol...')
   //query the database for all links for specific chatid and put them into searches array
-  const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  const db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   const searches = [];
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
@@ -190,7 +190,10 @@ bot.command("stop", (ctx) => {
   });
 
 // Handle other messages.
-bot.on("message", (ctx) => ctx.reply("Got another message!"));
+bot.on("message", (ctx) => {
+  ctx.reply("Got another message!")
+  console.log("ChatId: " + ctx.message.chat.id);
+});
 
 // Now that you specified how to handle messages, you can start your bot.
 // This will connect to the Telegram servers and wait for messages.

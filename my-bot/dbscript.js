@@ -3,7 +3,7 @@ import sqlite3 from 'sqlite3';
 import bcrypt from 'bcrypt';
 import "dotenv/config";
 
-const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+const db = new sqlite3.Database('./db/VOVAKijijiAlerter_db.db');
 const saltRounds = 10;
 
 async function initializeDatabase() {

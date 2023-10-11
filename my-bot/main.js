@@ -5,7 +5,7 @@ import config from './config.js';
 import sqlite3 from 'sqlite3';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
+const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
 let intervalId;
 // You can now register listeners on your bot object `bot`.
 // grammY will call the listeners when users send messages to your bot.
@@ -51,7 +51,7 @@ bot.command("showlinks", (ctx) => {
           myLinks.push({
             url: row.url,
             hash: "",
-            //newAdUrl: "",
+            newAdUrl: "",
             chatId: ctx.message.chat.id,
           });
         });
@@ -84,7 +84,7 @@ bot.command("deletelink", (ctx) => {
           myLinks.push({
             url: row.url,
             hash: "",
-            //newAdUrl: "",
+            newAdUrl: "",
             chatId: ctx.message.chat.id,
           });
         });
@@ -155,8 +155,11 @@ bot.command("start", (ctx) => {
           searches.push({
             url: row.url,
             hash: "",
-            //newAdUrl: "",
+            newAdUrl: "",
             chatId: ctx.message.chat.id,
+            price: "",
+            attr1: "",
+            attr2: "",
           });
         });
       }
@@ -164,11 +167,11 @@ bot.command("start", (ctx) => {
   console.log("sitesToCrawl: " + JSON.stringify(searches));
 
   // Generate INITIAL hashes for each URL
-  Promise.all(searches.map(async (site) => {
-    const topResultsString = await generateTopResultsString(site.url);
+  Promise.all(searches.map(async (search) => {
+    const topResultsString = await generateTopResultsString(search);
     //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
-    site.hash = checksum(topResultsString);    
-    return site;
+    search.hash = checksum(topResultsString);    
+    return search;
   }));
 
   // 600000ms = 10 minutes

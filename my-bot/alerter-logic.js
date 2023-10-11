@@ -3,98 +3,28 @@ import axios  from 'axios';
 import cheerio from 'cheerio';
 import { sendMessage } from './main.js';
 import fs from 'fs';
+import c from 'config';
 
-export const generateTopResultsString = async (url) => {
-try {
-  const HTMLresponse = await axios.get(url);
-  //handle all cases of status code other than 200
-  if (HTMLresponse.status !== 200) {
-    console.log(`Error fetching ${url}: ${HTMLresponse.status}`);
-    return;
-  }
-  const $ = cheerio.load(HTMLresponse.data);
-  console.log(`Fetching ${url}`);
-  //let msgHref;
-  let topResultsString = "";
-  // handle case of (data-testid="zero-results-page")
-  const zeroResults = true ? $('div[data-testid="zero-results-page"]').length > 0 : false;
-  if (zeroResults) {
-    console.log("No results found");
-    return topResultsString;
-  }
 
-  // handle case of (data-testid="srp-search-list") existing
-  const ulElements = $('ul[data-testid="srp-search-list"]');
-
-if (ulElements.length > 1) {
-  // If there are multiple ul elements, target the second one
-  const secondUl = ulElements.eq(1);
-  secondUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
-    if (i < 3) {
-      const href = element.attribs["href"];
-      // if (i===0) {
-      //   msgHref = "https://www.kijiji.ca" + href;
-      // }
-      const id = href.substring(href.lastIndexOf("/") + 1);
-      topResultsString += `\n${id}`;
-    }
-  });
-  console.log("Top Results String:" + topResultsString);
-  // topResultsObj = {
-  //   topResultsString : topResultsString,
-  //   msgHref : msgHref
-  // };
-  return topResultsString;
-} else if (ulElements.length === 1) {
-  // If there's only one ul element, target it
-  const firstUl = ulElements.eq(0);
-  firstUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
-    if (i < 3) {
-      const href = element.attribs["href"];
-      // if (i===0) {
-      //   msgHref = "https://www.kijiji.ca" + href;
-      // }
-      const id = href.substring(href.lastIndexOf("/") + 1);
-      topResultsString += `\n${id}`;
-    }
-  });
-  // topResultsObj = {
-  //   topResultsString : topResultsString,
-  //   msgHref : msgHref
-  // };
-console.log("Top Results String:\n" + topResultsString);
-return topResultsString;
-} else {
-  console.log("No ul elements found");
-  // topResultsObj = {
-  //   topResultsString : topResultsString,
-  //   msgHref : msgHref
-  // };
-  return topResultsString;
-}
-  } catch (err) {
-    console.log(`Could not complete fetch of ${url}: ${err}`)
-  }
-}
 
 // Function to check URLs for updates
-export async function checkURLs(sites) {
+export async function checkURLs(searches) {
   console.log(`🕵️  Checking for updates...`);
-  sites.forEach(async (site) => {
-    console.log(`current time: ${new Date().toLocaleString()}   site: ${site.url}`);
-    await huntForChanges(site);
+  searches.forEach(async (search) => {
+    console.log(`current time: ${new Date().toLocaleString()} \nsite: ${search.url}`);
+    await huntForChanges(search);
   });
 }
 
 // Function to hunt for changes in a specific URL
-async function huntForChanges(site) {
-  const { url, hash: oldHash, chatId } = site;
+async function huntForChanges(search) {
+  //const { url, hash: oldHash, newAdUrl, chatId, price, attr1, attr2 } = search;
   try {
-    const topResultsString = await generateTopResultsString(url);
+    const topResultsString = await generateTopResultsString(search);
     // checks if topResultsString is not undefined
     if (topResultsString === undefined) {
-      console.log(`❌ Error: topResultsString is undefined for ${url}`);
-      const fullerr =  `❌ Error: topResultsString is undefined for ${url}`;
+      console.log(`❌ Error: topResultsString is undefined for ${search.url}`);
+      const fullerr =  `❌ Error: topResultsString is undefined for ${search.url}`;
       // remove fs undefined error
       fs.writeFile('error.txt', fullerr , (err) => {
         if (err) throw err;
@@ -103,15 +33,17 @@ async function huntForChanges(site) {
       return;
     } else {
     const newHash = checksum(topResultsString);
-    if ((newHash !== oldHash) && (newHash !== "")) {
+    if ((newHash !== search.hash) && (topResultsString !== "")) {
       console.log(`💡 There is a new post!`);
-      site.hash = newHash;
+      console.log(`📝 Old hash: ${search.hash}`);
+      console.log(`📝 New hash: ${newHash}`);
+      search.hash = newHash;
       //site.newAdUrl = topResultsObj.msgHref;
-      const response = buildMessage(url);
-      sendMessage(chatId, response); // Send the message to Telegram
+      const response = buildMessage(search);
+      sendMessage(search.chatId, response); // Send the message to Telegram
       return;
     }
-    console.log(`😓 Nothing to report on your search for ${url.split('/')[5]}.`);
+    console.log(`😓 Nothing to report on your search for ${search.url.split('/')[5]}.`);
     return;
   }
   } catch (error) {
@@ -119,12 +51,92 @@ async function huntForChanges(site) {
   }
 }
 
-export const buildMessage = (url) => {
+export const generateTopResultsString = async (search) => {
+  try {
+    let topResultsString;
+    const HTMLresponse = await axios.get(search.url);
+    //handle all cases of status code other than 200
+    if (HTMLresponse.status !== 200) {
+      console.log(`Error fetching ${search.url}: ${HTMLresponse.status}`);
+      return topResultsString;
+    }
+    const $ = cheerio.load(HTMLresponse.data);
+    console.log(`Fetching ${search.url}`);
+    topResultsString = "";
+    // handle case of (data-testid="zero-results-page")
+    const zeroResults = true ? $('div[data-testid="zero-results-page"]').length > 0 : false;
+    if (zeroResults) {
+      console.log("No results found");
+      return topResultsString;
+    }
+  
+    // handle case of (data-testid="srp-search-list") existing
+    const ulElements = $('ul[data-testid="srp-search-list"]');
 
+  if (ulElements.length > 1) {
+    // If there are multiple ul elements, target the second one
+    const secondUl = ulElements.eq(1);
+    const prices = secondUl.find('p[data-testid="listing-price"]');
+    const attribs1 = secondUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
+    const attribs2 = secondUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
+
+    secondUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
+      if (i < 3) {
+        const href = element.attribs["href"];
+        if (i===0) {
+          search.newAdUrl = "https://www.kijiji.ca" + href;
+          search.price = prices.eq(0).text();
+          search.attr1 = attribs1.eq(0).text();
+          search.attr2 = attribs2.eq(1).text();
+
+          console.log("Price!: " + search.price);
+          console.log("Attr1!: " + search.attr1);
+          console.log("Attr2!: " + search.attr2);
+        }
+        const id = href.substring(href.lastIndexOf("/") + 1);
+        topResultsString += `\n${id}`;
+      }
+    });
+    console.log("Top Results String:" + topResultsString);
+    console.log("First If -> search Object!: " + JSON.stringify(search));
+
+    return topResultsString;
+  } else if (ulElements.length === 1) {
+    // If there's only one ul element, target it
+    const firstUl = ulElements.eq(0);
+    const prices = firstUl.find('p[data-testid="listing-price"]');
+    const attribs1 = firstUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
+    const attribs2 = firstUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
+    //console.log("firstUl: " + JSON.stringify(firstUl));
+    firstUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
+      if (i < 3) {
+        const href = element.attribs["href"];
+        if (i===0) {
+          search.newAdUrl = "https://www.kijiji.ca" + href;
+          search.price = prices.eq(0).text();
+          search.attr1 = attribs1.eq(0).text();
+          search.attr2 = attribs2.eq(1).text();
+        }
+        const id = href.substring(href.lastIndexOf("/") + 1);
+        topResultsString += `\n${id}`;
+      }
+    });
+  console.log("Top Results String:\n" + topResultsString);
+  console.log("Else If -> search Object!: " + JSON.stringify(search));
+  return topResultsString;
+  } else {
+    console.log("No ul elements found");
+    return topResultsString;
+  }
+    } catch (err) {
+      console.log(`Could not complete fetch of ${search.url}: ${err}`)
+    }
+  }
+
+export const buildMessage = (search) => {
+  console.log("Build Message -> search Object!: " + JSON.stringify(search));
   // This is the position of the search query inside kijiji's URL slug
-  return {
-    body: `${url}`
-  };
+  return search.newAdUrl + "\n" + "Price: " + search.price + "\n" + "Attr1: " + search.attr1 + "\n" + "Attr2: " + search.attr2;
   }
 
 export default {

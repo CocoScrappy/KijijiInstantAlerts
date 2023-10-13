@@ -77,8 +77,8 @@ export const generateTopResultsString = async (search) => {
     // If there are multiple ul elements, target the second one
     const secondUl = ulElements.eq(1);
     const prices = secondUl.find('p[data-testid="listing-price"]');
-    const attribs1 = secondUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
-    const attribs2 = secondUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
+    const attribs1 = secondUl.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
+    const attribs2 = secondUl.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
 
     secondUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
       if (i < 3) {
@@ -86,8 +86,8 @@ export const generateTopResultsString = async (search) => {
         if (i===0) {
           search.newAdUrl = "https://www.kijiji.ca" + href;
           search.price = prices.eq(0).text();
-          search.attr1 = attribs1.eq(0).text();
-          search.attr2 = attribs2.eq(1).text();
+          search.attr1 = attribs1.eq(0).children('p').text();
+          search.attr2 = attribs2.eq(1).children('p').text();
 
           console.log("Price!: " + search.price);
           console.log("Attr1!: " + search.attr1);
@@ -105,8 +105,8 @@ export const generateTopResultsString = async (search) => {
     // If there's only one ul element, target it
     const firstUl = ulElements.eq(0);
     const prices = firstUl.find('p[data-testid="listing-price"]');
-    const attribs1 = firstUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
-    const attribs2 = firstUl.find('li[data-testid="attribute-list-non-mobile"]').children('div').children('p');
+    const attribs1 = firstUl.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
+    const attribs2 = firstUl.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
     //console.log("firstUl: " + JSON.stringify(firstUl));
     firstUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
       if (i < 3) {
@@ -114,8 +114,8 @@ export const generateTopResultsString = async (search) => {
         if (i===0) {
           search.newAdUrl = "https://www.kijiji.ca" + href;
           search.price = prices.eq(0).text();
-          search.attr1 = attribs1.eq(0).text();
-          search.attr2 = attribs2.eq(1).text();
+          search.attr1 = attribs1.eq(0).children('p').text();
+          search.attr2 = attribs2.eq(1).children('p').text();
         }
         const id = href.substring(href.lastIndexOf("/") + 1);
         topResultsString += `\n${id}`;

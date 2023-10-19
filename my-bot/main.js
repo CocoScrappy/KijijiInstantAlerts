@@ -1,5 +1,5 @@
 import { Bot } from 'grammy';
-import { generateTopResultsString, checkURLs } from './alerter-logic.js';
+import { processSearch, checkURLs } from './alerter-logic.js';
 import checksum from 'checksum';
 import config from './config.js';
 import sqlite3 from 'sqlite3';
@@ -168,7 +168,7 @@ bot.command("start", (ctx) => {
 
   // Generate INITIAL hashes for each URL
   Promise.all(searches.map(async (search) => {
-    const topResultsString = await generateTopResultsString(search);
+    const topResultsString = await processSearch(search);
     //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
     search.hash = checksum(topResultsString);    
     return search;

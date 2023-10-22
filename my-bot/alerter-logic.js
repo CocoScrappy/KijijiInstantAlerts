@@ -67,17 +67,21 @@ const generateTopResultsString = ($, search) => {
 
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
+      const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
       const prices = targetUl.find('p[data-testid="listing-price"]');
-      const attribs1 = targetUl.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
-      const attribs2 = targetUl.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
+      const liItem = targetListing.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
+console.log("liItem: " + liItem.text()); 
 
       targetUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
         const href = element.attribs["href"];
         if (i === 0) {
           search.newAdUrl = "https://www.kijiji.ca" + href;
           search.price = prices.eq(0).text();
-          search.attr1 = attribs1.eq(0).children('p').text();
-          search.attr2 = attribs2.eq(1).children('p').text();
+          search.attr1 = liItem.eq(0).text() || "Not specified";
+          search.attr2 = liItem.eq(1).text() || "Not specified";
+          console.log("Price!: " + search.price);
+          console.log("Attr1!: " + search.attr1);
+          console.log("Attr2!: " + search.attr2);
         }
         const id = href.substring(href.lastIndexOf("/") + 1);
         topResultsString += `\n${id}`;

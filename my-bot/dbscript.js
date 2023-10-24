@@ -48,22 +48,22 @@ async function initializeDatabase() {
         });
     });
 
-    await new Promise((resolve, reject) => {
-    //OPTIONAL _______________________________________________________________________
-    // populate with first record chatid = 955679628 and url from .env
-    db.run(`INSERT INTO Links (url, chatID) VALUES ('${process.env.URL_TO_SEARCH}', 955679628)`);
-    // populate chats table with chatid = 955679628 and userid = 1
-    db.run(`INSERT INTO Chats (userID, chatID) VALUES (1, 955679628)`);
-    // encrypt password Vivi123 and populate table users with kizyakov.d@gmail.com, kizyakov.d username
-    bcrypt.hash('Loki123', saltRounds, function (err, hash) {
-        db.run(`INSERT INTO Users (username, email, password) VALUES ('tesia.r', 'tesia.r@gmail.com', '${hash}')`);
-        console.log(hash);
-    }), (err) => {
-        if (err) reject(err);
-        else resolve();
-    };
-    });
-    //________________________________________________________________________________
+        // //OPTIONAL _______________________________________________________________________
+    // await new Promise((resolve, reject) => {
+    // // populate with first record chatid = 955679628 and url from .env
+    // db.run(`INSERT INTO Links (url, chatID) VALUES ('${process.env.URL_TO_SEARCH}', 955679628)`);
+    // // populate chats table with chatid = 955679628 and userid = 1
+    // db.run(`INSERT INTO Chats (userID, chatID) VALUES (1, 955679628)`);
+    // // encrypt password Vivi123 and populate table users with kizyakov.d@gmail.com, kizyakov.d username
+    // bcrypt.hash('Loki123', saltRounds, function (err, hash) {
+    //     db.run(`INSERT INTO Users (username, email, password) VALUES ('tesia.r', 'tesia.r@gmail.com', '${hash}')`);
+    //     console.log(hash);
+    // }), (err) => {
+    //     if (err) reject(err);
+    //     else resolve();
+    // };
+    // });
+    // //________________________________________________________________________________
 }
 
 initializeDatabase()

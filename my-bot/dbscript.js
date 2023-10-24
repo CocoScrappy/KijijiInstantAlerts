@@ -3,7 +3,7 @@ import sqlite3 from 'sqlite3';
 import bcrypt from 'bcrypt';
 import "dotenv/config";
 
-const db = new sqlite3.Database('./db/VOVAKijijiAlerter_db.db');
+const db = new sqlite3.Database('./db/TeshKijijiAlerter_db.db');
 const saltRounds = 10;
 
 async function initializeDatabase() {
@@ -55,8 +55,8 @@ async function initializeDatabase() {
     // populate chats table with chatid = 955679628 and userid = 1
     db.run(`INSERT INTO Chats (userID, chatID) VALUES (1, 955679628)`);
     // encrypt password Vivi123 and populate table users with kizyakov.d@gmail.com, kizyakov.d username
-    bcrypt.hash('Vivi123', saltRounds, function (err, hash) {
-        db.run(`INSERT INTO Users (username, email, password) VALUES ('kizyakov.d', 'kizyakov.d@gmail.com', '${hash}')`);
+    bcrypt.hash('Loki123', saltRounds, function (err, hash) {
+        db.run(`INSERT INTO Users (username, email, password) VALUES ('tesia.r', 'tesia.r@gmail.com', '${hash}')`);
         console.log(hash);
     }), (err) => {
         if (err) reject(err);

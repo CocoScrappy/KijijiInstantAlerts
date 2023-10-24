@@ -7,7 +7,7 @@ import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
 import c from 'config';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+const bot = new Bot(process.env.BOT_TOKEN_TESH); // <-- put your bot token between the ""
 // Create an object to store user intervals in an array with chatid as key
 let userIntervals = [];
 
@@ -38,7 +38,7 @@ bot.command("showlinks", (ctx) => {
 
   const myLinks = [];
 
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/TeshKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
       if (err) {
@@ -87,7 +87,7 @@ bot.command("addlink", async (ctx) => {
     return;
   }
   //check if url is already in the database
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/TeshKijijiAlerter_db.db');
   db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
     if (err) {
       console.log(err);
@@ -115,7 +115,7 @@ bot.command("start", (ctx) => {
       throw new Error("🕵 Already running Ad-Patrol... Use /stop command to stop current patrol and then /start to relaunch");
     }
   //query the database for all links for specific chatid and put them into searches array
-  const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  const db = new sqlite3.Database('./db/TeshKijijiAlerter_db.db');
   const searches = [];
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
@@ -172,7 +172,10 @@ bot.command("stop", (ctx) => {
   });
 
 // Handle other messages.
-bot.on("message", (ctx) => ctx.reply("Got another message!"));
+bot.on("message", (ctx) => {
+  console.log("ChatID: " + ctx.message.chat.id);
+  ctx.reply("Got another message!")
+});
 
 
 
@@ -182,7 +185,7 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
   const index = parseInt(ctx.match[1]);
   console.log("Index: " + index);
   const myLinks = [];
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/TeshKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
      db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
       if (err) {
@@ -200,7 +203,7 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
         console.log("myLinksLength: " + myLinks.length);
         if (index && (index <= myLinks.length)) {
           // Delete from database
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/TeshKijijiAlerter_db.db');
           console.log("ChatId2: " + ctx.chat.id);
           db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
           ctx.reply("Search URL deleted!");

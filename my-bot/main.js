@@ -3,6 +3,7 @@ import { processSearch, checkURLs } from './alerter-logic.js';
 import checksum from 'checksum';
 import config from './config.js';
 import sqlite3 from 'sqlite3';
+import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
 
 // Create an instance of the `Bot` class and pass your bot token to it.
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
@@ -31,14 +32,7 @@ bot.command("help", (ctx) => {
 
 // Command to show all search URLs. SQLLite supports multiple read transactions at the same time.
 bot.command("showlinks", (ctx) => {
-  //query the database for all links for specific chatid and put them into searches array
-  // db creation code:
-  //   CREATE TABLE IF NOT EXISTS Links (
-  //     urlID INTEGER PRIMARY KEY AUTOINCREMENT,
-  //     url TEXT,
-  //     chatID INTEGER,
-  //     FOREIGN KEY (chatID) REFERENCES Chats(chatID)
-  // )
+
   const myLinks = [];
 
   let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
@@ -56,12 +50,22 @@ bot.command("showlinks", (ctx) => {
           });
         });
       }
-  if (myLinks.length > 0) {
-    let message = "My search links:\n";
-    myLinks.forEach((link, index) => {
-      message += `${index + 1}. ${link.url}\n`;
-    });
-    ctx.reply(message);
+      if (myLinks.length > 0) {
+        let message = "My search links:\n";
+        myLinks.forEach((link, index) => {
+          message += `${index + 1}. ${link.url}\n`;
+        });
+        // Create InlineKeyboard with buttons for each link
+      const keyboard = new InlineKeyboard();
+      myLinks.forEach((link, index) => {
+        keyboard.row(
+          { text: `Delete ${index + 1}`, callback_data: `delete_${index + 1}` }
+        );
+      });
+      
+      ctx.reply(message, {
+        reply_markup: keyboard,
+      });
     console.log("Links: " + JSON.stringify(myLinks));
   } else {
     ctx.reply("No URLs added for search. Use /addlink to add a new search URL.");
@@ -130,12 +134,7 @@ bot.command("addlink", async (ctx) => {
   });
   // insert url into database
   db.run(`INSERT INTO Links (url, chatID) VALUES ('${url}', ${ctx.message.chat.id})`);
-  // add url to searches array
-//   searches.push({
-//     url,
-//     hash: "",
-//     chatId: ctx.message.chat.id,
-// });
+  db.close();
   ctx.reply("Search URL added!");
 });
 
@@ -195,10 +194,46 @@ bot.command("stop", (ctx) => {
 // Handle other messages.
 bot.on("message", (ctx) => ctx.reply("Got another message!"));
 
-// Now that you specified how to handle messages, you can start your bot.
-// This will connect to the Telegram servers and wait for messages.
 
-// Start the bot.
+
+// Handle callback queries for button presses
+bot.callbackQuery(/delete_(\d+)/, (ctx) => {
+
+  const index = parseInt(ctx.match[1]);
+  console.log("Index: " + index);
+  const myLinks = [];
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
+     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log("ChatId1: " + ctx.chat.id);
+        rows.forEach((row) => {
+          myLinks.push({
+            url: row.url,
+            hash: "",
+            newAdUrl: "",
+            chatId: ctx.chat.id
+          });
+        });
+        console.log("myLinksLength: " + myLinks.length);
+        if (index && (index <= myLinks.length)) {
+          // Delete from database
+          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          console.log("ChatId2: " + ctx.chat.id);
+          db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
+          ctx.reply("Search URL deleted!");
+        } else {
+          ctx.reply("Please provide a valid index.");
+        }
+      db.close();
+      }
+    });
+});
+
+
+// Start the bot -connect to the Telegram servers and wait for messages.
 bot.start();
 
 // Code for integrating Telegram push notifications here

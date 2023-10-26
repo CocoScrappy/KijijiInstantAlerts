@@ -1,12 +1,16 @@
 import { Bot } from 'grammy';
-import { generateTopResultsString, checkURLs } from './alerter-logic.js';
+import { processSearch, checkURLs } from './alerter-logic.js';
 import checksum from 'checksum';
 import config from './config.js';
 import sqlite3 from 'sqlite3';
+import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
+import c from 'config';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
-let intervalId;
+const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+// Create an object to store user intervals in an array with chatid as key
+let userIntervals = [];
+
 // You can now register listeners on your bot object `bot`.
 // grammY will call the listeners when users send messages to your bot.
 
@@ -31,14 +35,7 @@ bot.command("help", (ctx) => {
 
 // Command to show all search URLs. SQLLite supports multiple read transactions at the same time.
 bot.command("showlinks", (ctx) => {
-  //query the database for all links for specific chatid and put them into searches array
-  // db creation code:
-  //   CREATE TABLE IF NOT EXISTS Links (
-  //     urlID INTEGER PRIMARY KEY AUTOINCREMENT,
-  //     url TEXT,
-  //     chatID INTEGER,
-  //     FOREIGN KEY (chatID) REFERENCES Chats(chatID)
-  // )
+
   const myLinks = [];
 
   let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
@@ -56,50 +53,25 @@ bot.command("showlinks", (ctx) => {
           });
         });
       }
-  if (myLinks.length > 0) {
-    let message = "My search links:\n";
-    myLinks.forEach((link, index) => {
-      message += `${index + 1}. ${link.url}\n`;
-    });
-    ctx.reply(message);
+      if (myLinks.length > 0) {
+        let message = "My search links:\n";
+        myLinks.forEach((link, index) => {
+          message += `${index + 1}. ${link.url}\n`;
+        });
+        // Create InlineKeyboard with buttons for each link
+      const keyboard = new InlineKeyboard();
+      myLinks.forEach((link, index) => {
+        keyboard.row(
+          { text: `Delete ${index + 1}`, callback_data: `delete_${index + 1}` }
+        );
+      });
+      
+      ctx.reply(message, {
+        reply_markup: keyboard,
+      });
     console.log("Links: " + JSON.stringify(myLinks));
   } else {
     ctx.reply("No URLs added for search. Use /addlink to add a new search URL.");
-  }
-});
-  db.close();
-});
-
-// Command to delete a search URL
-bot.command("deletelink", (ctx) => {
-  const index = parseInt(ctx.message.text.split(" ")[1]);
-  const myLinks = [];
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
-  // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
-    db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
-      if (err) {
-        console.log(err);
-      } else {
-        rows.forEach((row) => {
-          myLinks.push({
-            url: row.url,
-            hash: "",
-            newAdUrl: "",
-            chatId: ctx.message.chat.id,
-          });
-        });
-      }
-
-  //check if index is valid
-  if (index && (index <= myLinks.length)) {
-    //delete from database
-    let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
-    // query database to delete link by index which is an order number in the list of links for a specific chatid, not urlid. And delete from searches array
-    db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.message.chat.id} LIMIT 1 OFFSET ${index - 1})`);
-    //searches.splice(index - 1, 1);
-    ctx.reply("Search URL deleted!");
-  } else {
-    ctx.reply("Please provide a valid index.");
   }
 });
   db.close();
@@ -130,19 +102,18 @@ bot.command("addlink", async (ctx) => {
   });
   // insert url into database
   db.run(`INSERT INTO Links (url, chatID) VALUES ('${url}', ${ctx.message.chat.id})`);
-  // add url to searches array
-//   searches.push({
-//     url,
-//     hash: "",
-//     chatId: ctx.message.chat.id,
-// });
+  db.close();
   ctx.reply("Search URL added!");
 });
 
 // Handle the /start command.
+//pass interval id to start command to be able to stop the interval
 bot.command("start", (ctx) => {
-  ctx.reply("🕵 Started Ad-Patrol...")
-  console.log('🕵 Started Ad-Patrol...')
+  try {
+    if (userIntervals[ctx.chat.id]) {
+      ctx.reply("🕵 Already running Ad-Patrol... Use /stop command to stop current patrol and then /start to relaunch");
+      throw new Error("🕵 Already running Ad-Patrol... Use /stop command to stop current patrol and then /start to relaunch");
+    }
   //query the database for all links for specific chatid and put them into searches array
   const db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   const searches = [];
@@ -168,26 +139,34 @@ bot.command("start", (ctx) => {
 
   // Generate INITIAL hashes for each URL
   Promise.all(searches.map(async (search) => {
-    const topResultsString = await generateTopResultsString(search);
+    const topResultsString = await processSearch(search);
     //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
     search.hash = checksum(topResultsString);    
     return search;
   }));
 
-  // 600000ms = 10 minutes
-  intervalId = setInterval( () => {
+  // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
+  userIntervals[ctx.chat.id] = setInterval( () => {
+    // print userIntervals array to console
+    console.log("userIntervals: " + JSON.stringify(userIntervals[ctx.chat.id]));
   if (searches) {
     checkURLs(searches);
   } else {
     ctx.reply(`Please add URLs with command "/addlink <url>"!`);
   }
   }, process.env.CHECK_INTERVAL_MS || 600000);
+  ctx.reply("🕵 Started Ad-Patrol...")
+  console.log('🕵 Started Ad-Patrol...')
 });
+} catch (error) {
+  console.log(`❌ Error starting patrol: ${error.message}`);
+}
 });
 
 // Command to stop the search
 bot.command("stop", (ctx) => {
-    clearInterval(intervalId);
+    clearInterval(userIntervals[ctx.chat.id]);
+    delete userIntervals[ctx.chat.id];
     console.log("🛑 Stoped Ad-Patrol...");
     ctx.reply("🛑 Search has been stopped.");
   });
@@ -198,10 +177,46 @@ bot.on("message", (ctx) => {
   console.log("ChatId: " + ctx.message.chat.id);
 });
 
-// Now that you specified how to handle messages, you can start your bot.
-// This will connect to the Telegram servers and wait for messages.
 
-// Start the bot.
+
+// Handle callback queries for button presses
+bot.callbackQuery(/delete_(\d+)/, (ctx) => {
+
+  const index = parseInt(ctx.match[1]);
+  console.log("Index: " + index);
+  const myLinks = [];
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
+     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log("ChatId1: " + ctx.chat.id);
+        rows.forEach((row) => {
+          myLinks.push({
+            url: row.url,
+            hash: "",
+            newAdUrl: "",
+            chatId: ctx.chat.id
+          });
+        });
+        console.log("myLinksLength: " + myLinks.length);
+        if (index && (index <= myLinks.length)) {
+          // Delete from database
+          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          console.log("ChatId2: " + ctx.chat.id);
+          db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
+          ctx.reply("Search URL deleted!");
+        } else {
+          ctx.reply("Please provide a valid index.");
+        }
+      db.close();
+      }
+    });
+});
+
+
+// Start the bot -connect to the Telegram servers and wait for messages.
 bot.start();
 
 // Code for integrating Telegram push notifications here

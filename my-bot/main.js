@@ -7,7 +7,7 @@ import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
 import c from 'config';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
 // Create an object to store user intervals in an array with chatid as key
 let userIntervals = [];
 
@@ -185,7 +185,7 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
   const index = parseInt(ctx.match[1]);
   console.log("Index: " + index);
   const myLinks = [];
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into searches array with hash and chatid for each link to be used in checkURLs function
      db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
       if (err) {
@@ -203,7 +203,7 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
         console.log("myLinksLength: " + myLinks.length);
         if (index && (index <= myLinks.length)) {
           // Delete from database
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
           console.log("ChatId2: " + ctx.chat.id);
           db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
           ctx.reply("Search URL deleted!");

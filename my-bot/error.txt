@@ -1,1 +1,1 @@
-❌ Error: topResultsString is undefined for https://www.kijiji.ca/b-cars-trucks/winnipeg/2008__-new__used/c174l1700192a68a49?kilometers=13534__155000&for-sale-by=ownr&sort=dateDesc&radius=304.0&price=1500__15000&address=Winnipeg%2C+MB&ll=49.895422%2C-97.138515
+❌ Error: topResultsString is undefined for https://www.kijiji.ca/abcd

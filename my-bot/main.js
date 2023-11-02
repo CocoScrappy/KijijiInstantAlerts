@@ -5,10 +5,11 @@ import config from './config.js';
 import sqlite3 from 'sqlite3';
 import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
 import c from 'config';
+import { checkIfValidURL } from './middleware/validators.js';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
-// Create an object to store user intervals in an array with chatid as key
+// Create an object to store user intervals in an array with chatid as key, used to support running intervals for multiple users
 let userIntervals = [];
 
 // You can now register listeners on your bot object `bot`.
@@ -33,7 +34,7 @@ bot.command("help", (ctx) => {
   `);
 });
 
-// Command to show all search URLs. SQLLite supports multiple read transactions at the same time.
+// Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
 
   const myLinks = [];
@@ -82,7 +83,7 @@ bot.command("addlink", async (ctx) => {
   //add link to the database
   const url = ctx.message.text.split(" ")[1];
   //check if url is valid
-  if (!url) {
+  if (!url || checkIfValidURL(url) === false) {
     ctx.reply("Please provide a valid URL.");
     return;
   }
@@ -106,7 +107,6 @@ bot.command("addlink", async (ctx) => {
   ctx.reply("Search URL added!");
 });
 
-// Handle the /start command.
 //pass interval id to start command to be able to stop the interval
 bot.command("start", (ctx) => {
   try {
@@ -176,7 +176,7 @@ bot.on("message", (ctx) => ctx.reply("Got another message!"));
 
 
 
-// Handle callback queries for button presses
+// Handle callback queries for button presses in showlinks command
 bot.callbackQuery(/delete_(\d+)/, (ctx) => {
 
   const index = parseInt(ctx.match[1]);

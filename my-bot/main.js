@@ -1,16 +1,38 @@
-import { Bot } from 'grammy';
+import { Bot, session } from 'grammy';
+import { conversations, createConversation } from '@grammyjs/conversations';
 import { processSearch, checkURLs } from './alerter-logic.js';
 import checksum from 'checksum';
 import config from './config.js';
 import sqlite3 from 'sqlite3';
 import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
-import c from 'config';
-import { checkIfValidURL } from './middleware/validators.js';
-
+import { checkIfValidURL, checkIfValidEmail } from './middleware/validators.js';
 // Create an instance of the `Bot` class and pass your bot token to it.
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+// Create a conversation
+bot.use(session({ initial: () => ({ userEmail : ""}) }));
+bot.use(conversations(collectUserEmail));
+bot.use(createConversation(collectUserEmail));
+
+
 // Create an object to store user intervals in an array with chatid as key, used to support running intervals for multiple users
 let userIntervals = [];
+
+
+//when bot is initially added by a new user, prompt for email address
+bot.command("start", async (ctx) => {
+  //check if chat is private
+  if (ctx.chat.type === "private") {
+    await ctx.reply("Welcome to KijijiAlerter! \nPlease provide an email address in case we need to contact you or troubleshoot an issue:");
+    await ctx.conversation.enter("collectUserEmail");
+    await ctx.reply("You are all set! Use /help to see available commands.");
+  }
+  else {
+    ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
+  }
+});
+
+
+
 
 // You can now register listeners on your bot object `bot`.
 // grammY will call the listeners when users send messages to your bot.
@@ -29,7 +51,7 @@ bot.command("help", (ctx) => {
   /showlinks - Show all search URLs
   /deletelink <#> - Delete a search URL by its index
   /addlink <url> - Add a new search URL
-  /start - Start alerter
+  /patrol - Start alerter
   /stop - Stop alerter
   `);
 });
@@ -84,7 +106,7 @@ bot.command("addlink", async (ctx) => {
   const url = ctx.message.text.split(" ")[1];
   //check if url is valid
   if (!url || checkIfValidURL(url) === false) {
-    ctx.reply("Please provide a valid URL.");
+    ctx.reply("Please provide a valid URL in format: /addlink <your_url_here_no_brackets>");
     return;
   }
   //check if url is already in the database
@@ -108,7 +130,7 @@ bot.command("addlink", async (ctx) => {
 });
 
 //pass interval id to start command to be able to stop the interval
-bot.command("start", (ctx) => {
+bot.command("patrol", (ctx) => {
   try {
     if (userIntervals[ctx.chat.id]) {
       ctx.reply("🕵 Already running Ad-Patrol... Use /stop command to stop current patrol and then /start to relaunch");
@@ -172,7 +194,7 @@ bot.command("stop", (ctx) => {
   });
 
 // Handle other messages.
-bot.on("message", (ctx) => ctx.reply("Got another message!"));
+bot.on("message", (ctx) => ctx.reply("Got another message but it's not a command. Use /help for menu."));
 
 
 
@@ -212,12 +234,102 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
     });
 });
 
+async function getValidEmail(conversation, ctx) {
+  while (true) {
+      const { message } = await conversation.wait();
+      ctx.session.userEmail = message.text;
 
-// Start the bot -connect to the Telegram servers and wait for messages.
-bot.start();
+      if (checkIfValidEmail(ctx.session.userEmail)) {
+          return ctx.session.userEmail;
+      } else {
+          ctx.reply(ctx.session.userEmail + " is not a valid email address.");
+          await ctx.reply("Please enter a valid email address:");
+      }
+  }
+}
+
+async function confirmEmail(conversation, ctx, email) {
+  while (true) {
+      await ctx.reply(`Please confirm that you entered the correct email address ${email} (y/n):`);
+      const { message } = await conversation.wait();
+      ctx.session.confirmation = message.text.toLowerCase();
+
+      if (['y', 'yes'].includes(ctx.session.confirmation)) {
+          return true;
+      } else {
+          await ctx.reply("Please re-enter your email address:");
+          email = await getValidEmail(conversation, ctx);
+      }
+  }
+}
+
+async function checkIfInDb(email, chatID) {
+  return new Promise((resolve, reject) => {
+      try {
+          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          db.all(
+              'SELECT 1 FROM Users WHERE email = ? OR chatID = ?;',
+              [email, chatID],
+              (err, rows) => {
+                  if (err) {
+                      reject(err);
+                  } else {
+                      resolve(rows.length === 0);
+                  }
+                  db.close();
+              }
+          );
+      } catch (error) {
+          console.error('Error:', error);
+          db.close();
+      }
+  });
+}
+
+// Main flow
+async function collectUserEmail(conversation, ctx) {
+  while (true) {
+      const userEmail = await getValidEmail(conversation, ctx);
+      if (await confirmEmail(conversation, ctx, userEmail)) {
+          if (await checkIfInDb(userEmail, ctx.chat.id)) {
+              console.log("Email address is valid and unique. Proceeding...");
+
+              let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+
+              try {
+                // Insert into Users table
+                let lowerCaseEmail = userEmail.toLowerCase();
+                db.run(`
+                    INSERT INTO Users (chatID, email, expDate, canContact) 
+                    VALUES (?, ?, datetime('now', '+2 days'), 1)`, [ctx.chat.id, lowerCaseEmail], (err) => {
+                    if (err) {
+                        console.error('Error inserting data:', err);
+                    } else {
+                        console.log('Data inserted successfully.');
+                    }
+            
+                    // Close the database connection
+                    db.close();
+                });
+            } catch (error) {
+                console.error('Error inserting user into user table:', error);
+                // Close the database connection in case of an error
+                db.close();
+            }
+
+              break;
+          } else {
+              ctx.reply("There is an email address associated with your account, "+
+              "if you would like to change your contact email please use /help for menu.");
+              break;
+          }
+      }
+  }
+}
+
+
 
 // Code for integrating Telegram push notifications here
-
 
 // Function to send Telegram message
 export async function sendMessage(chatId, message) {
@@ -227,3 +339,8 @@ export async function sendMessage(chatId, message) {
       console.log("Error sending message:", error);
     }
   }
+
+// Start the bot -connect to the Telegram servers and wait for messages.
+bot.start();
+
+

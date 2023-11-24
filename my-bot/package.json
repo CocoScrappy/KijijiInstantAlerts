@@ -1,13 +1,14 @@
 {
   "type": "module",
   "dependencies": {
+    "@grammyjs/conversations": "^1.1.2",
     "axios": "^1.4.0",
     "bcrypt": "^5.1.1",
     "checksum": "^1.0.0",
     "cheerio": "^1.0.0-rc.12",
     "config": "^3.3.9",
     "dotenv": "^16.3.1",
-    "grammy": "^1.17.2",
+    "grammy": "^1.19.2",
     "sqlite3": "^5.1.6"
   }
 }

@@ -1,10 +1,10 @@
 
 import sqlite3 from 'sqlite3';
-import bcrypt from 'bcrypt';
+//import bcrypt from 'bcrypt';
 import "dotenv/config";
 
 const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-const saltRounds = 10;
+//const saltRounds = 10;
 
 async function initializeDatabase() {
     await new Promise((resolve, reject) => {
@@ -13,7 +13,8 @@ async function initializeDatabase() {
                 chatID INTEGER PRIMARY KEY,
                 email TEXT UNIQUE,
                 expDate DATETIME,
-                canContact INTEGER
+                canContact BOOLEAN default TRUE,
+                patrolActive BOOLEAN default FALSE
             )
         `, (err) => {
             if (err) reject(err);

@@ -10,30 +10,72 @@ import c from 'config';
 // Create an instance of the `Bot` class and pass your bot token to it.
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
 // Create a conversation
-bot.use(session({ initial: () => ({ userEmail : "", expDate: "", userLinks: []}) }));
+
+// Creates a new object that will be used as initial session data.
+function createInitialSessionData() {
+  return { userEmail : "", expDate: "", userLinks: []};
+}
+
+bot.use(session({ initial: createInitialSessionData }));
 bot.use(conversations(collectUserEmail));
 bot.use(createConversation(collectUserEmail));
 
-let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-// Create an object to store user intervals in an array with chatid as key, 
-//used to support running intervals for multiple users
 let userIntervals = [];
-// const currentTime = new Date().toISOString();  // Get current time in ISO format
-// db.all(`SELECT chatID FROM Users WHERE patrolActive = TRUE
-//         AND datetime(expDate) >= datetime(?)`, [currentTime], (err, rows) => {
-//   if (err) {
-//     console.log(err);
-//   } else {
-//     rows.forEach((row) => {
-//       userIntervals[row.chatID] = setInterval( () => {
-//       // code for launching patrols for all users here:
-//         if (ctx.session.userLinks) {
-//         checkURLs(ctx.session.userLinks);
-//       }
-//       }, process.env.CHECK_INTERVAL_MS || 600000);
-//     });
-//   }
-// }); 
+let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+const patrolData = new Map();
+
+db.all(`SELECT Users.chatID, expDate, url FROM Users
+  JOIN Links ON Users.chatID = Links.chatID
+  WHERE Users.patrolActive = 1
+  AND Users.expDate > CURRENT_DATE`, (err, rows) => {
+    if (err) {
+      throw err;
+    }
+
+  // Process the results and populate patrolData map
+  rows.forEach(row => {
+    const { chatID, url } = row;
+    if (!patrolData.has(chatID)) {
+      patrolData.set(chatID, { userInterval: null, userLinks: new Set() });
+    }
+    patrolData.get(chatID).userLinks.push(url);
+  });
+ db.close();
+});
+
+for (const [chatID, { userInterval, userLinks }] of patrolData) {
+  // Generate INITIAL hashes for each URL
+  Promise.all(userLinks.map(async (link) => {
+    const topResultsString = await processSearch(link);
+    //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
+    link.hash = checksum(topResultsString);    
+    return link;
+  }));
+
+  // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
+  userIntervals[ctx.chat.id] = setInterval( () => {
+    // print userIntervals array to console
+    console.log("userIntervals: " + JSON.stringify(userIntervals[ctx.chat.id]));
+  if (ctx.session.userLinks) {
+    checkURLs(ctx.session.userLinks);
+  } else {
+    ctx.reply(`Please add URLs with command 
+              \n/addlink <your_url_here_no_brackets>`);
+  }
+  }, process.env.CHECK_INTERVAL_MS_HIGHEST || 600000);
+  ctx.reply("🕵 Started Ad-Patrol...");
+  console.log('🕵 Started Ad-Patrol...');
+
+  // set patrolActive to true in database
+  await setPatrolState(ctx.chat.id, true);
+});
+
+db.close();
+} catch (error) {
+  console.log(`❌ Error starting patrol: ${error.message}`);
+}
+});
+}    
 
 //when bot is initially added by a new user, prompt for email address
 bot.command("start", async (ctx) => {
@@ -80,6 +122,8 @@ bot.command("help", (ctx) => {
 // Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
   const myLinks = [];
+
+  // IDEALLY, MOVE THIS TO A SEPARATE FUNCTION TO BE CALLED AFTER SERVER STARTS FOR ALL USERS AND USE SESSIONS TO STORE THE DATA
   let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
   db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
@@ -87,18 +131,13 @@ bot.command("showlinks", (ctx) => {
       console.log(err);
     } else {
       rows.forEach((row) => {
-        myLinks.push({
-          url: row.url,
-          hash: "",
-          newAdUrl: "",
-          chatId: ctx.message.chat.id,
-        });
+        myLinks.push(row.url);
       });
     }
     if (myLinks.length > 0) {
       let message = "Your search links:\n";
       myLinks.forEach((link, index) => {
-        message += `${index + 1}. ${link.url}\n`;
+        message += `${index + 1}. ${link}\n`;
       });
       // Create InlineKeyboard with buttons for each link
       const keyboard = new InlineKeyboard();
@@ -156,18 +195,20 @@ bot.command("addlink", async (ctx) => {
   console.log("Db closed!");
 });
 
+
 //pass interval id to start command to be able to stop the interval
 bot.command("patrol", async(ctx) => {
   try {
-  
+    if (userIntervals[ctx.chat.id]) {
+      ctx.reply("🕵 Already running Ad-Patrol... Use 🛑 /stop command to stop current patrol and then /start to relaunch");
+      return;
+    }
+    
   // SEPARATE INTO A SEPARATE FUNCTION TO BE CALLED AFTER SERVER STARTS, 
   // BUT ADD QUERY TO GET ALL USERS WITH NON-EXPIRED SUBSCRIPTIONS AND THEIR RELATED LINKS. 
   // USE OVERLOADING TO PASS ALL THAT DATA TO THE FUNCTION
     //query the database for all links for specific chatid and put them into userLinks array
   const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-
-
-
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, async (err, rows) => {
       if (err) {
@@ -192,11 +233,8 @@ bot.command("patrol", async(ctx) => {
     ctx.reply(`Please add URLs with command \n"/addlink <your_url_here_no_brackets>"`);
     return;
   }
-  if (userIntervals[ctx.chat.id]) {
-    ctx.reply("🕵 Already running Ad-Patrol... Use 🛑 /stop command to stop current patrol and then /start to relaunch");
-    return;
-  }
   //check if current date is past expiration date
+  
   const expirationDate = new Date(ctx.session.expDate);
   const currentDate = new Date();
   if (expirationDate < currentDate) {
@@ -223,7 +261,7 @@ bot.command("patrol", async(ctx) => {
     ctx.reply(`Please add URLs with command 
               \n/addlink <your_url_here_no_brackets>`);
   }
-  }, process.env.CHECK_INTERVAL_MS || 600000);
+  }, process.env.CHECK_INTERVAL_MS_HIGHEST || 600000);
   ctx.reply("🕵 Started Ad-Patrol...");
   console.log('🕵 Started Ad-Patrol...');
 
@@ -430,10 +468,6 @@ async function checkForExpiredSubscriptions() {
             delete userIntervals[row.chatID];
             // set patrolActive to false in database
             setPatrolState(row.chatID, false);
-            //!!! remove all links from relevant userLinks arrays to prevent duplicate links in the array
-            //ctx.session.userLinks = []; this doesn't work because ctx is not defined here
-            // solution: 
-
             console.log("🛑 Stopped Ad-Patrol for chatID: " + row.chatID);
             // Send message to user
             sendMessage(row.chatID, "😞 Your subscription has expired. Please purchase a new subscription to continue patrolling these ads.");
@@ -449,12 +483,12 @@ async function checkForExpiredSubscriptions() {
 // Check for expired subscriptions every 24 hours
 setInterval(checkForExpiredSubscriptions, 86400000);
 
-// keep track of sessions in a database
-//
+
+// // Create a session middleware
 // const session = new Map();
 // bot.use((ctx, next) => {
 //   if (!session.has(ctx.chat.id)) {
-//     session.set(ctx.chat.id, { userLinks: [] }); 
+//     session.set(ctx.chat.id, { userLinks: [] }, { expDate: "" }, { patrolActive: false });
 //   }
 //   return next();
 // });

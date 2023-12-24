@@ -5,17 +5,16 @@ import { sendMessage } from './main.js';
 import fs from 'fs';
 import c from 'config';
 
-export async function checkURLs(searches) {
+export async function checkURLs(links) {
   console.log(`🕵️ Checking for updates...`);
-  await Promise.all(searches.map(huntForChanges));
+  await Promise.all(links.map(huntForChanges));
 }
 
-async function huntForChanges(search) {
+async function huntForChanges(link) {
   try {
-    const topResultsString = await processSearch(search);
-
+    const topResultsString = await processSearch(link);
     if (!topResultsString) {
-      const error = `❌ Error: topResultsString is undefined for ${search.url}`;
+      const error = `❌ Error: topResultsString is undefined for ${link.url}`;
       fs.writeFile('error.txt', error, (err) => {
         if (err) throw err;
         console.log('Error was written to file successfully!');
@@ -25,42 +24,42 @@ async function huntForChanges(search) {
 
     const newHash = checksum(topResultsString);
 
-    if (newHash !== search.hash && topResultsString !== "") {
+    if (newHash !== link.hash && topResultsString !== "") {
       console.log(`💡 There is a new post!`);
-      console.log(`📝 Old hash: ${search.hash}`);
+      console.log(`📝 Old hash: ${link.hash}`);
       console.log(`📝 New hash: ${newHash}`);
-      search.hash = newHash;
-      const response = buildMessage(search);
-      sendMessage(search.chatId, response);
+      link.hash = newHash;
+      const response = buildMessage(link);
+      sendMessage(link.chatId, response, bot);
     } else {
-      console.log(`😓 Nothing to report on your search for ${search.url.split('/')[5]}.`);
+      console.log(`😓 Nothing to report on your search for ${link.url.split('/')[5]}.`);
     }
   } catch (error) {
     console.log(`❌ Error: ${error.message}`);
   }
 }
 
-export const processSearch = async (search) => {
+export const processSearch = async (link) => {
   try {
-    const HTMLresponse = await axios.get(search.url);
+    const HTMLresponse = await axios.get(link.url);
 
     if (HTMLresponse.status !== 200) {
-      console.log(`Error fetching ${search.url}: ${HTMLresponse.status}`);
+      console.log(`Error fetching ${link.url}: ${HTMLresponse.status}`);
       return "";
     }
 
     const $ = cheerio.load(HTMLresponse.data);
-    console.log(`Fetching ${search.url}`);
+    console.log(`Fetching ${link.url}`);
 
-    const topResultsString = generateTopResultsString($, search);
+    const topResultsString = generateTopResultsString($, link);
     return topResultsString;
   } catch (err) {
-    console.log(`❌ Could not complete fetch of ${search.url}: ${err}`);
+    console.log(`❌ Could not complete fetch of ${link.url}: ${err}`);
     return "";
   }
 }
 
-const generateTopResultsString = ($, search) => {
+const generateTopResultsString = ($, link) => {
   try {
     let topResultsString = "";
     const ulElements = $('ul[data-testid="srp-search-list"]');
@@ -75,13 +74,13 @@ console.log("liItem: " + liItem.text());
       targetUl.find('a[data-testid="listing-link"]').slice(0, 3).each((i, element) => {
         const href = element.attribs["href"];
         if (i === 0) {
-          search.newAdUrl = "https://www.kijiji.ca" + href;
-          search.price = prices.eq(0).text();
-          search.attr1 = liItem.eq(0).text() || "Not specified";
-          search.attr2 = liItem.eq(1).text() || "Not specified";
-          console.log("Price!: " + search.price);
-          console.log("Attr1!: " + search.attr1);
-          console.log("Attr2!: " + search.attr2);
+          link.price = prices.eq(0).text();
+          link.attr1 = liItem.eq(0).text() || "Not specified";
+          link.attr2 = liItem.eq(1).text() || "Not specified";
+          link.newAdUrl = "https://www.kijiji.ca" + href;
+          console.log("Price!: " + link.price);
+          console.log("Attr1!: " + link.attr1);
+          console.log("Attr2!: " + link.attr2);
         }
         const id = href.substring(href.lastIndexOf("/") + 1);
         topResultsString += `\n${id}`;
@@ -97,9 +96,9 @@ console.log("liItem: " + liItem.text());
   }
 }
 
-export const buildMessage = (search) => {
-  console.log("Build Message -> search Object!: " + JSON.stringify(search));
-  return `${search.newAdUrl}\nPrice: ${search.price}\nAttr1: ${search.attr1}\nAttr2: ${search.attr2}`;
+export const buildMessage = (link) => {
+  console.log("Build Message -> search Object!: " + JSON.stringify(link));
+  return `${link.newAdUrl}\nPrice: ${link.price}\nAttr1: ${link.attr1}\nAttr2: ${link.attr2}`;
 }
 
 export default {

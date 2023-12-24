@@ -7,75 +7,70 @@ import sqlite3 from 'sqlite3';
 import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
 import { checkIfValidURL, checkIfValidEmail } from './middleware/validators.js';
 import c from 'config';
+
 // Create an instance of the `Bot` class and pass your bot token to it.
-const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
-// Create a conversation
 
-// Creates a new object that will be used as initial session data.
-function createInitialSessionData() {
-  return { userEmail : "", expDate: "", userLinks: []};
-}
-
-bot.use(session({ initial: createInitialSessionData }));
-bot.use(conversations(collectUserEmail));
-bot.use(createConversation(collectUserEmail));
-
-let userIntervals = [];
 let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-const patrolData = new Map();
-
-db.all(`SELECT Users.chatID, expDate, url FROM Users
-  JOIN Links ON Users.chatID = Links.chatID
-  WHERE Users.patrolActive = 1
-  AND Users.expDate > CURRENT_DATE`, (err, rows) => {
-    if (err) {
-      throw err;
-    }
-
-  // Process the results and populate patrolData map
-  rows.forEach(row => {
-    const { chatID, url } = row;
-    if (!patrolData.has(chatID)) {
-      patrolData.set(chatID, { userInterval: null, userLinks: new Set() });
-    }
-    patrolData.get(chatID).userLinks.push(url);
+try {
+  const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+  bot.use(session({ initial: createInitialSessionData }));
+  bot.use(conversations(collectUserEmail));
+  bot.use(createConversation(collectUserEmail));
+  
+  //let userIntervals = [];
+  
+  // Create a map to automatically start the patrol for each user with active patrol and
+  // non-expired subscription. Also to be used to compare hashes and send notifications.
+  const rows = await new Promise((resolve, reject) => {
+    db.all(`SELECT Users.chatID, expDate, url FROM Users
+    JOIN Links ON Users.chatID = Links.chatID
+    WHERE Users.patrolActive = 1
+    AND Users.expDate > CURRENT_DATE`, (err, rows) => {
+      if (err) {
+        reject(err);
+      }
+      resolve(rows);
+    });
   });
- db.close();
+  
+  const patrolData = new Map();
+    // Process the results and populate patrolData map
+    rows.forEach(async (row) => {
+      const { chatID, expDate, url } = row;
+      // If chatID is not in patrolData map, add it
+      if (!patrolData.has(chatID)) {
+        patrolData.set(chatID, { userInterval: null, expDate: expDate, userLinks: [] });
+      }
+      patrolData.get(chatID).userLinks.push({
+        url: url,
+        hash: "",
+        newAdUrl: "",
+        chatId: chatID,
+        price: "",
+        attr1: "",
+        attr2: "",
+      });
+    });
+  
+  console.log("patrolData: " + JSON.stringify(patrolData));
+// Iterate through all values in patrolData
+patrolData.forEach( async (data, chatID) => {
+  await createInitialHashesForPatrol(chatID);
+  data.userInterval = setInterval( async () => {
+    if (data.userLinks) {
+      checkURLs(data.userLinks);
+    } else {
+      console.log(`Please add URLs with command \n/addlink <your_url_here_no_brackets>`);
+    }
+  } , process.env.CHECK_INTERVAL_MS_HIGHEST || 600000);
 });
 
-for (const [chatID, { userInterval, userLinks }] of patrolData) {
-  // Generate INITIAL hashes for each URL
-  Promise.all(userLinks.map(async (link) => {
-    const topResultsString = await processSearch(link);
-    //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
-    link.hash = checksum(topResultsString);    
-    return link;
-  }));
 
-  // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
-  userIntervals[ctx.chat.id] = setInterval( () => {
-    // print userIntervals array to console
-    console.log("userIntervals: " + JSON.stringify(userIntervals[ctx.chat.id]));
-  if (ctx.session.userLinks) {
-    checkURLs(ctx.session.userLinks);
-  } else {
-    ctx.reply(`Please add URLs with command 
-              \n/addlink <your_url_here_no_brackets>`);
-  }
-  }, process.env.CHECK_INTERVAL_MS_HIGHEST || 600000);
-  ctx.reply("🕵 Started Ad-Patrol...");
-  console.log('🕵 Started Ad-Patrol...');
+  // Start the bot -connect to the Telegram servers and wait for messages.
+  bot.start();
+  // Check for expired subscriptions every 24 hours
+  setInterval(checkForExpiredSubscriptions, 86400000);
 
-  // set patrolActive to true in database
-  await setPatrolState(ctx.chat.id, true);
-});
-
-db.close();
-} catch (error) {
-  console.log(`❌ Error starting patrol: ${error.message}`);
-}
-});
-}    
 
 //when bot is initially added by a new user, prompt for email address
 bot.command("start", async (ctx) => {
@@ -199,23 +194,27 @@ bot.command("addlink", async (ctx) => {
 //pass interval id to start command to be able to stop the interval
 bot.command("patrol", async(ctx) => {
   try {
-    if (userIntervals[ctx.chat.id]) {
-      ctx.reply("🕵 Already running Ad-Patrol... Use 🛑 /stop command to stop current patrol and then /start to relaunch");
-      return;
+    //check if patrolData for given chatID have been initialized
+    if (!patrolData.has(ctx.message.chat.id)) {
+      patrolData.set(ctx.message.chat.id, { userInterval: null, expDate: "", userLinks: [] });
+    } else {
+      if (patrolData.get(ctx.message.chat.id).userInterval !== null) {
+        ctx.reply("🕵 Already running Ad-Patrol... Use 🛑 /stop command to stop current patrol and then /start to relaunch");
+        return;
+      }
     }
-    
-  // SEPARATE INTO A SEPARATE FUNCTION TO BE CALLED AFTER SERVER STARTS, 
-  // BUT ADD QUERY TO GET ALL USERS WITH NON-EXPIRED SUBSCRIPTIONS AND THEIR RELATED LINKS. 
-  // USE OVERLOADING TO PASS ALL THAT DATA TO THE FUNCTION
     //query the database for all links for specific chatid and put them into userLinks array
-  const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-  // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
-    db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, async (err, rows) => {
+    const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+    // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
+    db.all(`SELECT Users.chatID, Users.expDate, Links.url FROM Users
+            JOIN Links ON Users.chatID = Links.chatID
+            WHERE Users.chatID = ?
+            AND Users.expDate > CURRENT_DATE`,[ctx.message.chat.id], async (err, rows) => {
       if (err) {
         console.log(err);
       } else {
         rows.forEach((row) => {
-          ctx.session.userLinks.push({
+          patrolData.get(ctx.message.chat.id).userLinks.push({
             url: row.url,
             hash: "",
             newAdUrl: "",
@@ -226,74 +225,66 @@ bot.command("patrol", async(ctx) => {
           });
         });
       }
-  //
-  console.log("sitesToCrawl: " + JSON.stringify(ctx.session.userLinks));
 
-  if (ctx.session.userLinks.length === 0) {
-    ctx.reply(`Please add URLs with command \n"/addlink <your_url_here_no_brackets>"`);
-    return;
+      if (patrolData.get(ctx.message.chat.id).userLinks === undefined || patrolData.get(ctx.message.chat.id).userLinks.size === 0) {
+        ctx.reply(`Oops! Either your subscription expired or you do not have any links to patrol.
+        Please use /help to sort out either of those issues.`);
+        return;
+      }
+
+      await createInitialHashesForPatrol(ctx.message.chat.id);
+      try {
+        // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
+        patrolData.get(ctx.message.chat.id).userInterval = setInterval( () => {
+          if (patrolData.get(ctx.message.chat.id).userLinks) {
+            checkURLs(patrolData.get(ctx.message.chat.id).userLinks);
+          } else {
+            ctx.reply(`Please add URLs with command 
+                      \n/addlink <your_url_here_no_brackets>`);
+          }
+          }, process.env.CHECK_INTERVAL_MS_HIGHEST || 600000);
+          ctx.reply("🕵 Started Ad-Patrol...");
+          console.log('🕵 Started Ad-Patrol...');
+      } catch (error) {
+        console.log(`❌ Error creating interval by user: ${error.message}`);
+        console.log(error.stack);
+      }
+      await setPatrolState(ctx.chat.id, true);
+
+    });
+  } catch (error) {
+    console.log(`❌ Error starting patrol: ${error.message}`);
+    //log error trace
+    console.log(error.stack);
+  } finally {
+    // close the database connection in the finally block
+    db.close();
   }
-  //check if current date is past expiration date
-  
-  const expirationDate = new Date(ctx.session.expDate);
-  const currentDate = new Date();
-  if (expirationDate < currentDate) {
-    ctx.reply(" 😞 Your subscription has expired. Please purchase a new subscription to continue using the bot.");
-    return;
-  }
-
-
-  // Generate INITIAL hashes for each URL
-  Promise.all(ctx.session.userLinks.map(async (link) => {
-    const topResultsString = await processSearch(link);
-    //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
-    link.hash = checksum(topResultsString);    
-    return link;
-  }));
-
-  // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
-  userIntervals[ctx.chat.id] = setInterval( () => {
-    // print userIntervals array to console
-    console.log("userIntervals: " + JSON.stringify(userIntervals[ctx.chat.id]));
-  if (ctx.session.userLinks) {
-    checkURLs(ctx.session.userLinks);
-  } else {
-    ctx.reply(`Please add URLs with command 
-              \n/addlink <your_url_here_no_brackets>`);
-  }
-  }, process.env.CHECK_INTERVAL_MS_HIGHEST || 600000);
-  ctx.reply("🕵 Started Ad-Patrol...");
-  console.log('🕵 Started Ad-Patrol...');
-
-  // set patrolActive to true in database
-  await setPatrolState(ctx.chat.id, true);
-});
-
-db.close();
-} catch (error) {
-  console.log(`❌ Error starting patrol: ${error.message}`);
-}
 });
 
 // Command to stop the patrol
 bot.command("stop", async (ctx) => {
-  if (userIntervals[ctx.chat.id]) {
-    clearInterval(userIntervals[ctx.chat.id]);
-    delete userIntervals[ctx.chat.id];
-    // set patrolActive to false in database
-    await setPatrolState(ctx.chat.id, false);
-    // remove all links from userLinks array to prevent duplicate links in the array
-    ctx.session.userLinks = [];
-    console.log("🛑 Stopped Ad-Patrol...");
-    ctx.reply("🛑 Patrol has been stopped.");
-  } else {
-    ctx.reply("💁 Patrol is not currently running.");
+  try {
+    if (patrolData.has(ctx.chat.id)) {
+      clearInterval(patrolData.get(ctx.chat.id).userInterval);
+      //set userInterval to null
+      patrolData.get(ctx.chat.id).userInterval = null;
+      // set patrolActive to false in database
+      await setPatrolState(ctx.chat.id, false);
+      // remove all links from userLinks array to prevent duplicate links in the array
+      patrolData.get(ctx.chat.id).userLinks = [];
+      console.log("🛑 Stopped Ad-Patrol...");
+      ctx.reply("🛑 Patrol has been stopped.");
+    } else {
+      ctx.reply("💁 Patrol is not currently running.");
+    }
+  } catch (error) {
+    console.log(`❌ Error stopping patrol: ${error.message}`);
   }
   });
 
 // Handle other messages.
 bot.on("message", (ctx) => ctx.reply("Got another message but it's not a command. Use /help for menu."));
-
 
 
 // Handle callback queries for button presses in showlinks command
@@ -333,6 +324,12 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
     });
 });
 
+// Creates a new object that will be used as initial session data.
+function createInitialSessionData() {
+  return { userEmail : "", confirmation: ""};
+}
+
+//FIX THIS FUNCTION - endless loop
 async function getValidEmail(conversation, ctx) {
   while (true) {
       const { message } = await conversation.wait();
@@ -346,7 +343,7 @@ async function getValidEmail(conversation, ctx) {
       }
   }
 }
-
+//FIX THIS FUNCTION - endless loop
 async function confirmEmail(conversation, ctx, email) {
   while (true) {
       await ctx.reply(`Please confirm that you entered the correct email address ${email} (y/n):`);
@@ -388,8 +385,8 @@ async function checkIfInDb(email, chatID) {
 
 // Main flow
 async function collectUserEmail(conversation, ctx) {
-  
   try {
+    //FIX THIS  - endless loop
     while (true) {
       const userEmail = await getValidEmail(conversation, ctx);
       if (await confirmEmail(conversation, ctx, userEmail)) {
@@ -429,6 +426,20 @@ async function collectUserEmail(conversation, ctx) {
   }
 }
 
+async function createInitialHashesForPatrol(chatID) {
+  try {
+    Promise.all(patrolData.get(chatID).userLinks.map(async (link) => {
+      const topResultsString = await processSearch(link);
+      //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
+      link.hash = checksum(topResultsString);    
+      return link;
+    }));
+  } catch (error) {
+    console.log(`❌ Error creating initial hashes for patrol: ${error.message}`);
+    console.log(error.stack);
+  }
+}
+
 async function setPatrolState(chatID, patrolState) {
   return new Promise((resolve, reject) => {
       try {
@@ -447,7 +458,7 @@ async function setPatrolState(chatID, patrolState) {
           );
       } catch (error) {
           console.error('Error:', error);
-          db.close();
+          console.log(error.stack);
       }
   });
 }
@@ -463,9 +474,9 @@ async function checkForExpiredSubscriptions() {
         console.log(err);
       } else {
         rows.forEach((row) => {
-          if (userIntervals[row.chatID]) {
-            clearInterval(userIntervals[row.chatID]);
-            delete userIntervals[row.chatID];
+          if (patrolData.has(row.chatID)) {
+            clearInterval(patrolData.get(row.chatID).userInterval);
+            delete patrolData.get(row.chatID).userInterval;
             // set patrolActive to false in database
             setPatrolState(row.chatID, false);
             console.log("🛑 Stopped Ad-Patrol for chatID: " + row.chatID);
@@ -480,8 +491,6 @@ async function checkForExpiredSubscriptions() {
   }
 }
 
-// Check for expired subscriptions every 24 hours
-setInterval(checkForExpiredSubscriptions, 86400000);
 
 
 // // Create a session middleware
@@ -495,16 +504,18 @@ setInterval(checkForExpiredSubscriptions, 86400000);
 
 // Code for integrating Telegram push notifications here
 
+} catch (err) {
+  console.log(`❌ Global Error starting patrol: ${err.message}`);
+  console.log(err.stack);
+} finally {
+  db.close();
+}
+
 // Function to send Telegram message
-export async function sendMessage(chatId, message) {
-    try {
-      await bot.api.sendMessage(chatId, message);
-    } catch (error) {
-      console.log("Error sending message:", error);
-    }
+export async function sendMessage(chatId, message, bot) {
+  try {
+    await bot.api.sendMessage(chatId, message);
+  } catch (error) {
+    console.log("Error sending message:", error);
   }
-
-// Start the bot -connect to the Telegram servers and wait for messages.
-bot.start();
-
-
+}

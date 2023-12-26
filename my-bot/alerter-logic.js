@@ -30,7 +30,7 @@ async function huntForChanges(link) {
       console.log(`📝 New hash: ${newHash}`);
       link.hash = newHash;
       const response = buildMessage(link);
-      sendMessage(link.chatId, response, bot);
+      sendMessage(link.chatId, response);
     } else {
       console.log(`😓 Nothing to report on your search for ${link.url.split('/')[5]}.`);
     }

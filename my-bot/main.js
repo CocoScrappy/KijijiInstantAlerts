@@ -11,8 +11,10 @@ import c from 'config';
 // Create an instance of the `Bot` class and pass your bot token to it.
 
 let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+const patrolData = new Map();
+
 try {
-  const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
   bot.use(session({ initial: createInitialSessionData }));
   bot.use(conversations(collectUserEmail));
   bot.use(createConversation(collectUserEmail));
@@ -33,7 +35,6 @@ try {
     });
   });
   
-  const patrolData = new Map();
     // Process the results and populate patrolData map
     rows.forEach(async (row) => {
       const { chatID, expDate, url } = row;
@@ -70,6 +71,8 @@ patrolData.forEach( async (data, chatID) => {
   bot.start();
   // Check for expired subscriptions every 24 hours
   setInterval(checkForExpiredSubscriptions, 86400000);
+
+
 
 
 //when bot is initially added by a new user, prompt for email address
@@ -492,7 +495,12 @@ async function checkForExpiredSubscriptions() {
 }
 
 
-
+} catch (err) {
+  console.log(`❌ Global Error starting patrol: ${err.message}`);
+  console.log(err.stack);
+} finally {
+  db.close();
+}
 // // Create a session middleware
 // const session = new Map();
 // bot.use((ctx, next) => {
@@ -504,18 +512,14 @@ async function checkForExpiredSubscriptions() {
 
 // Code for integrating Telegram push notifications here
 
-} catch (err) {
-  console.log(`❌ Global Error starting patrol: ${err.message}`);
-  console.log(err.stack);
-} finally {
-  db.close();
-}
+
 
 // Function to send Telegram message
-export async function sendMessage(chatId, message, bot) {
+export async function sendMessage(chatId, message) {
   try {
     await bot.api.sendMessage(chatId, message);
   } catch (error) {
     console.log("Error sending message:", error);
   }
 }
+

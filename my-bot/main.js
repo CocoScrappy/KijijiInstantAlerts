@@ -1,7 +1,8 @@
 import { Bot, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
-import { processSearch, checkURLs } from './alerter-logic.js';
-import checksum from 'checksum';
+import { fetchLinks, checkURLs, generateInitialSetForPatrol } from './alerter-logic.js';
+import axios from 'axios';
+import cheerio from 'cheerio';
 import config from './config.js';
 import sqlite3 from 'sqlite3';
 import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
@@ -9,7 +10,6 @@ import { checkIfValidURL, checkIfValidEmail } from './middleware/validators.js';
 import c from 'config';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-
 let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
 const patrolData = new Map();
@@ -18,11 +18,7 @@ try {
   bot.use(session({ initial: createInitialSessionData }));
   bot.use(conversations(collectUserEmail));
   bot.use(createConversation(collectUserEmail));
-  
-  //let userIntervals = [];
-  
-  // Create a map to automatically start the patrol for each user with active patrol and
-  // non-expired subscription. Also to be used to compare hashes and send notifications.
+
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url FROM Users
     JOIN Links ON Users.chatID = Links.chatID
@@ -35,7 +31,7 @@ try {
     });
   });
   
-    // Process the results and populate patrolData map
+    // Process the db query results and populate patrolData map
     rows.forEach(async (row) => {
       const { chatID, expDate, url } = row;
       // If chatID is not in patrolData map, add it
@@ -43,20 +39,19 @@ try {
         patrolData.set(chatID, { userInterval: null, expDate: expDate, userLinks: [] });
       }
       patrolData.get(chatID).userLinks.push({
-        url: url,
-        hash: "",
-        newAdUrl: "",
-        chatId: chatID,
+        url: url,// search filter url
+        topLinks: new Set(),// set of top 5 ad ids
         price: "",
         attr1: "",
         attr2: "",
+        newAdUrl: "",
+        chatId: chatID,
       });
     });
-  
   console.log("patrolData: " + JSON.stringify(patrolData));
 // Iterate through all values in patrolData
 patrolData.forEach( async (data, chatID) => {
-  await createInitialHashesForPatrol(chatID);
+  await createInitialSetsForPatrol(chatID);
   data.userInterval = setInterval( async () => {
     if (data.userLinks) {
       checkURLs(data.userLinks);
@@ -219,12 +214,12 @@ bot.command("patrol", async(ctx) => {
         rows.forEach((row) => {
           patrolData.get(ctx.message.chat.id).userLinks.push({
             url: row.url,
-            hash: "",
-            newAdUrl: "",
-            chatId: ctx.message.chat.id,
+            topLinks: new Set(),// set of top 5 ad ids
             price: "",
             attr1: "",
             attr2: "",
+            newAdUrl: "",
+            chatId: ctx.message.chat.id,
           });
         });
       }
@@ -232,10 +227,11 @@ bot.command("patrol", async(ctx) => {
       if (patrolData.get(ctx.message.chat.id).userLinks === undefined || patrolData.get(ctx.message.chat.id).userLinks.size === 0) {
         ctx.reply(`Oops! Either your subscription expired or you do not have any links to patrol.
         Please use /help to sort out either of those issues.`);
+        // because SQL query above looks for non expired subscriptions
         return;
       }
 
-      await createInitialHashesForPatrol(ctx.message.chat.id);
+      await createInitialSetsForPatrol(ctx.message.chat.id);
       try {
         // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
         patrolData.get(ctx.message.chat.id).userInterval = setInterval( () => {
@@ -411,7 +407,6 @@ async function collectUserEmail(conversation, ctx) {
                     }
             
                     ctx.session.expDate = Date.now() + 1209600000; // 14 days in milliseconds
-                    // Close the database connection
                     db.close();
                 });
             break;
@@ -424,18 +419,27 @@ async function collectUserEmail(conversation, ctx) {
   }
   } catch (error) {
     console.error('Error inserting user into user table:', error);
-    // Close the database connection in case of an error
     db.close();
   }
 }
 
-async function createInitialHashesForPatrol(chatID) {
+async function createInitialSetsForPatrol(chatID) {
   try {
-    Promise.all(patrolData.get(chatID).userLinks.map(async (link) => {
-      const topResultsString = await processSearch(link);
-      //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
-      link.hash = checksum(topResultsString);    
-      return link;
+    Promise.all(patrolData.get(chatID).userLinks.map(async (userLink) => {
+      const HTMLresponse = await axios.get(userLink.url);
+      if (HTMLresponse.status !== 200) {
+        console.log(`Error fetching ${userLink.url}: ${HTMLresponse.status}`);
+        return "";
+      }
+      //parse HTML response
+      const $ = cheerio.load(HTMLresponse.data);
+      console.log(`Fetching ${userLink.url}`);
+      userLink.topLinks = generateInitialSetForPatrol($, userLink);
+      return userLink;
+      // const topResultsString = await processSearch(link);
+      // //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
+      // link.hash = checksum(topResultsString);    
+      // return link;
     }));
   } catch (error) {
     console.log(`❌ Error creating initial hashes for patrol: ${error.message}`);
@@ -494,25 +498,12 @@ async function checkForExpiredSubscriptions() {
   }
 }
 
-
 } catch (err) {
   console.log(`❌ Global Error starting patrol: ${err.message}`);
   console.log(err.stack);
 } finally {
   db.close();
 }
-// // Create a session middleware
-// const session = new Map();
-// bot.use((ctx, next) => {
-//   if (!session.has(ctx.chat.id)) {
-//     session.set(ctx.chat.id, { userLinks: [] }, { expDate: "" }, { patrolActive: false });
-//   }
-//   return next();
-// });
-
-// Code for integrating Telegram push notifications here
-
-
 
 // Function to send Telegram message
 export async function sendMessage(chatId, message) {
@@ -523,3 +514,17 @@ export async function sendMessage(chatId, message) {
   }
 }
 
+export async function addedToSetWithLimit(mySet, element) {
+  if (!mySet.has(element)) {
+      if (mySet.size === 5) {
+          // Delete the first element to maintain the size limit
+          const firstElement = mySet.values().next().value;
+          mySet.delete(firstElement);
+      }
+      // Add the new element to the set
+      mySet.add(element);
+      return true;
+  } else {
+      return false;
+  }
+}

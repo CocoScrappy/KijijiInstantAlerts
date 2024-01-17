@@ -11,8 +11,8 @@ import c from 'config';
 import stripe from 'stripe';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
 const patrolData = new Map();
 
 try {
@@ -144,7 +144,7 @@ bot.command("subscribe", async (ctx) => {
 // Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
   const myLinks = [];
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
   db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
     if (err) {
@@ -198,7 +198,7 @@ bot.command("patrol", async (ctx) => {
       }
     }
     //query the database for all links for specific chatid and put them into userLinks array
-    const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+    const db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
     // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
     const rows = await new Promise((resolve, reject) => {
       db.all(`SELECT Users.chatID, Users.expDate, Links.url, Users.tier FROM Users
@@ -297,7 +297,7 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
   const index = parseInt(ctx.match[1]);
   console.log("Index: " + index);
   const myLinks = [];
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
      db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
       if (err) {
@@ -312,7 +312,7 @@ bot.callbackQuery(/delete_(\d+)/, (ctx) => {
         console.log("myLinksLength: " + myLinks.length);
         if (index && (index <= myLinks.length)) {
           // Delete from database
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
           db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
           ctx.reply("URL deleted!");
           //hide keyboard
@@ -334,7 +334,7 @@ function createInitialSessionData() {
 async function checkIfUserExists(chatID) {
   return new Promise((resolve, reject) => {
       try {
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
           db.all(
               'SELECT * FROM Users WHERE chatID = ?;',
               [chatID],
@@ -395,7 +395,7 @@ async function confirmEmail(conversation, ctx, email) {
 async function checkIfInDb(email, chatID) {
   return new Promise((resolve, reject) => {
       try {
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
           db.all(
               'SELECT * FROM Users WHERE email = ? OR chatID = ?;',
               [email, chatID],
@@ -431,7 +431,7 @@ async function collectUserEmail(conversation, ctx) {
         if (await checkIfInDb(userEmail, ctx.chat.id)) {
           console.log("Email address is valid and unique. Proceeding...");
 
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
           let lowerCaseEmail = userEmail.toLowerCase();
 
           db.run(`
@@ -485,7 +485,7 @@ async function addLink(conversation, ctx) {
       if (await checkIfValidURL(url)) {
         isValidURL = true;
         //check if url is already in the database
-        let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+        let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
         db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
           if (err) {
             console.log(err);
@@ -578,7 +578,7 @@ async function createInitialSetsForPatrol(chatID) {
 async function setPatrolState(chatID, patrolState) {
   return new Promise((resolve, reject) => {
       try {
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+          let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
           db.run(
               'UPDATE Users SET patrolActive = ? WHERE chatID = ?;',
               [patrolState, chatID],

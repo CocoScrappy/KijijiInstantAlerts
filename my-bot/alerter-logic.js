@@ -12,23 +12,18 @@ export async function checkURLs(links) {
 async function huntForChanges(userLink) {
   try {
     const topID = await fetchLinks(userLink);
-    console.log("Top ID1: " + topID);
     if (!topID) {
-      const error = `❌ Error: topLinks is undefined for ${userLink.url}`;
-      fs.writeFile('error.txt', error, (err) => {
-        if (err) throw err;
-        console.log('Error was written to file successfully!');
-      });
+      const error = `❌ Error: topLinks is undefined for user: ${userLink.chatID}, url: ${userLink.url}`;
+      console.log(error);
       return;
     }
     const addedToSet = await addedToSetWithLimit(userLink.topLinks, topID);
 
     if (addedToSet) {
-      console.log(`💡 There is a new post!`);
-      console.log(`📝 Top ads: ${ Array.from(userLink.topLinks)}`);
-      //_______________________________________________________
       const response = buildMessage(userLink);
       sendMessage(userLink.chatId, response);
+      console.log(`💡 There is a new post!`);
+      console.log(`📝 Top ads: ${ Array.from(userLink.topLinks)}`);
     } else {
       console.log(`😓 Nothing to report on your search for ${userLink.url.split('/')[5]}.`);
     }

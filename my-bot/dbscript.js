@@ -8,13 +8,15 @@ const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
 
 async function initializeDatabase() {
     await new Promise((resolve, reject) => {
+        //tiers: 0 - free, 1 - Low, 2 - Mid, 3 - High
         db.run(`
             CREATE TABLE IF NOT EXISTS Users (
                 chatID INTEGER PRIMARY KEY,
                 email TEXT UNIQUE,
                 expDate DATETIME,
                 canContact BOOLEAN default TRUE,
-                patrolActive BOOLEAN default FALSE
+                patrolActive BOOLEAN default FALSE,
+                tier INTEGER default 0
             )
         `, (err) => {
             if (err) reject(err);

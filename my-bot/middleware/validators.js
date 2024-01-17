@@ -1,5 +1,5 @@
 
-export function checkIfValidURL(url) {
+export async function checkIfValidURL(url) {
   try {
     // regex to check link validity https://www.kijiji.ca/anything
     const regex = new RegExp(/^(https:\/\/www.kijiji.ca\/).*/);

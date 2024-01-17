@@ -1,19 +1,22 @@
 
 import sqlite3 from 'sqlite3';
-import bcrypt from 'bcrypt';
+//import bcrypt from 'bcrypt';
 import "dotenv/config";
 
-const db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
-const saltRounds = 10;
+const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+//const saltRounds = 10;
 
 async function initializeDatabase() {
     await new Promise((resolve, reject) => {
+        //tiers: 0 - free, 1 - Low, 2 - Mid, 3 - High
         db.run(`
             CREATE TABLE IF NOT EXISTS Users (
-                userID INTEGER PRIMARY KEY,
-                username TEXT,
+                chatID INTEGER PRIMARY KEY,
                 email TEXT UNIQUE,
-                password TEXT
+                expDate DATETIME,
+                canContact BOOLEAN default TRUE,
+                patrolActive BOOLEAN default FALSE,
+                tier INTEGER default 0
             )
         `, (err) => {
             if (err) reject(err);
@@ -21,18 +24,18 @@ async function initializeDatabase() {
         });
     });
 
-    await new Promise((resolve, reject) => {
-        db.run(`
-            CREATE TABLE IF NOT EXISTS Chats (
-                userID INTEGER,
-                chatID INTEGER PRIMARY KEY,
-                FOREIGN KEY (userID) REFERENCES Users(userID)
-            )
-        `, (err) => {
-            if (err) reject(err);
-            else resolve();
-        });
-    });
+    // await new Promise((resolve, reject) => {
+    //     db.run(`
+    //         CREATE TABLE IF NOT EXISTS Chats (
+    //             userID INTEGER,
+    //             chatID INTEGER PRIMARY KEY,
+    //             FOREIGN KEY (userID) REFERENCES Users(userID)
+    //         )
+    //     `, (err) => {
+    //         if (err) reject(err);
+    //         else resolve();
+    //     });
+    // });
 
     await new Promise((resolve, reject) => {
         db.run(`
@@ -40,7 +43,7 @@ async function initializeDatabase() {
             urlID INTEGER PRIMARY KEY AUTOINCREMENT,
             url TEXT,
             chatID INTEGER,
-            FOREIGN KEY (chatID) REFERENCES Chats(chatID)
+            FOREIGN KEY (chatID) REFERENCES Users(chatID)
         )
         `, (err) => {
             if (err) reject(err);
@@ -48,21 +51,21 @@ async function initializeDatabase() {
         });
     });
 
-    await new Promise((resolve, reject) => {
     //OPTIONAL _______________________________________________________________________
-    // populate with first record chatid = 5456698432 and url from .env
-    db.run(`INSERT INTO Links (url, chatID) VALUES ('${process.env.URL_TO_SEARCH}', 5456698432)`);
-    // populate chats table with chatid = 5456698432 and userid = 1
-    db.run(`INSERT INTO Chats (userID, chatID) VALUES (1, 5456698432)`);
-    // encrypt password Vivi123 and populate table users with vlad_106@hotmail.com, Vova username
-    bcrypt.hash('Vivi123', saltRounds, function (err, hash) {
-        db.run(`INSERT INTO Users (username, email, password) VALUES ('Vova', 'vlad_106@hotmail.com', '${hash}')`);
-        console.log(hash);
-    }), (err) => {
-        if (err) reject(err);
-        else resolve();
-    };
-    });
+    // populate with first record chatid = 955679628 and url from .env
+    // await new Promise((resolve, reject) => {
+    // db.run(`INSERT INTO Links (url, chatID) VALUES ('${process.env.URL_TO_SEARCH}', 955679628)`);
+    // // populate chats table with chatid = 955679628 and userid = 1
+    // db.run(`INSERT INTO Chats (userID, chatID) VALUES (1, 955679628)`);
+    // // encrypt password Vivi123 and populate table users with kizyakov.d@gmail.com, kizyakov.d username
+    // bcrypt.hash('Vivi123', saltRounds, function (err, hash) {
+    //     db.run(`INSERT INTO Users (username, email, password) VALUES ('kizyakov.d', 'kizyakov.d@gmail.com', '${hash}')`);
+    //     console.log(hash);
+    // }), (err) => {
+    //     if (err) reject(err);
+    //     else resolve();
+    // };
+    // });
     //________________________________________________________________________________
 }
 

@@ -11,17 +11,16 @@ import c from 'config';
 import stripe from 'stripe';
 
 // Create an instance of the `Bot` class and pass your bot token to it.
-let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
-const patrolData = new Map();
 
+const patrolData = new Map();
+const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
 try {
   bot.use(session({ initial: createInitialSessionData }));
   bot.use(conversations(collectUserEmail, addLink, subscribeUser));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
   bot.use(createConversation(subscribeUser));
-  
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
     JOIN Links ON Users.chatID = Links.chatID
@@ -33,7 +32,7 @@ try {
       resolve(rows);
     });
   });
-  
+  db.close();
     // Process the db query results and populate patrolData map
     rows.forEach(async (row) => {
       const { chatID, expDate, url, tier } = row;
@@ -143,8 +142,9 @@ bot.command("subscribe", async (ctx) => {
 
 // Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
-  const myLinks = [];
   let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  try {
+  const myLinks = [];
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
   db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
     if (err) {
@@ -175,7 +175,12 @@ bot.command("showlinks", (ctx) => {
       ctx.reply(`➕ No URLs provided for the search. Please select /addlink in menu to add a URL for search.`);
     }
   });
-  db.close();
+  } catch (error) {
+    console.log(`❌ Error showing links: ${error.message}`);
+    console.log(error.stack);
+  } finally {
+    db.close();
+  }
 });
 
 // Command to add a new search URL
@@ -187,6 +192,7 @@ bot.command("addlink", async (ctx) => {
 
 //pass interval id to start command to be able to stop the interval
 bot.command("patrol", async (ctx) => {
+  const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   try {
     //check if patrolData for given chatID have been initialized
     if (!patrolData.has(ctx.message.chat.id)) {
@@ -198,7 +204,6 @@ bot.command("patrol", async (ctx) => {
       }
     }
     //query the database for all links for specific chatid and put them into userLinks array
-    const db = new sqlite3.Database('./db/KijijiAlerter_db.db');
     // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
     const rows = await new Promise((resolve, reject) => {
       db.all(`SELECT Users.chatID, Users.expDate, Links.url, Users.tier FROM Users
@@ -261,7 +266,6 @@ bot.command("patrol", async (ctx) => {
     // log error trace
     console.log(error.stack);
   } finally {
-    // close the database connection in the finally block
     db.close();
   }
 });
@@ -294,35 +298,41 @@ bot.on("message", (ctx) => ctx.reply("Got another message but it's not a command
 
 // Handle callback queries for button presses in showlinks command
 bot.callbackQuery(/delete_(\d+)/, (ctx) => {
-  const index = parseInt(ctx.match[1]);
-  console.log("Index: " + index);
-  const myLinks = [];
   let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-  // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
-     db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
-      if (err) {
-        console.log(err);
-      } else {
-        rows.forEach((row) => {
-          myLinks.push({
-            url: row.url,
-            chatId: ctx.chat.id
-          });
-        });
-        console.log("myLinksLength: " + myLinks.length);
-        if (index && (index <= myLinks.length)) {
-          // Delete from database
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
-          db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
-          ctx.reply("URL deleted!");
-          //hide keyboard
-          ctx.editMessageReplyMarkup();
+  try {
+    const index = parseInt(ctx.match[1]);
+    console.log("Index: " + index);
+    const myLinks = [];
+    // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
+      db.all(`SELECT url FROM Links WHERE chatID = ${ctx.chat.id}`, (err, rows) => {
+        if (err) {
+          console.log(err);
         } else {
-          ctx.reply("Please provide a valid index.");
+          rows.forEach((row) => {
+            myLinks.push({
+              url: row.url,
+              chatId: ctx.chat.id
+            });
+          });
+          console.log("myLinksLength: " + myLinks.length);
+          if (index && (index <= myLinks.length)) {
+            // Delete from database
+            db.run(`DELETE FROM Links WHERE urlID = (SELECT urlID FROM Links WHERE chatID = ${ctx.chat.id} LIMIT 1 OFFSET ${index - 1})`);
+            ctx.reply(`Link #${index} is deleted! Please restart patrol to apply changes. (/stop then /patrol)`);
+            //hide keyboard
+            ctx.editMessageReplyMarkup();
+          } else {
+            ctx.reply("Please provide a valid index.");
+          }
+        //db.close();
         }
-      db.close();
-      }
     });
+  } catch (error) {
+    console.log(`❌ Error deleting link: ${error.message}`);
+    console.log(error.stack);
+  } finally {
+    db.close();
+  }
 });
 
 // Creates a new object that will be used as initial session data.
@@ -332,9 +342,9 @@ function createInitialSessionData() {
 
 // Check if user is in the database
 async function checkIfUserExists(chatID) {
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
           db.all(
               'SELECT * FROM Users WHERE chatID = ?;',
               [chatID],
@@ -348,8 +358,10 @@ async function checkIfUserExists(chatID) {
               }
           );
       } catch (error) {
-          console.error('Error:', error);
-          db.close();
+        console.error('Error checking if user exists:', error);
+        console.log(error.stack);
+      } finally {
+        db.close();
       }
   });
 }
@@ -393,9 +405,9 @@ async function confirmEmail(conversation, ctx, email) {
 }
 
 async function checkIfInDb(email, chatID) {
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
           db.all(
               'SELECT * FROM Users WHERE email = ? OR chatID = ?;',
               [email, chatID],
@@ -406,12 +418,14 @@ async function checkIfInDb(email, chatID) {
                       console.log("Rows: " + JSON.stringify(rows));
                       resolve(rows.length === 0);
                   }
-                  db.close();
               }
           );
       } catch (error) {
           console.error('Error:', error);
-          db.close();
+          console.log(error.stack);
+          reject(error);
+      } finally {
+        db.close();
       }
   });
 }
@@ -421,6 +435,7 @@ async function collectUserEmail(conversation, ctx) {
   let userEmail;
   let isValidEmail = false;
   let userExists = false;
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
     try {
     while (!isValidEmail && !userExists) {
       userEmail = await getValidEmail(conversation, ctx);
@@ -431,7 +446,6 @@ async function collectUserEmail(conversation, ctx) {
         if (await checkIfInDb(userEmail, ctx.chat.id)) {
           console.log("Email address is valid and unique. Proceeding...");
 
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
           let lowerCaseEmail = userEmail.toLowerCase();
 
           db.run(`
@@ -473,6 +487,7 @@ async function collectUserEmail(conversation, ctx) {
 async function addLink(conversation, ctx) {
   let isValidURL = false;
   let url;
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
     try {
     while (!isValidURL) {
       const { message } = await conversation.wait();
@@ -485,7 +500,6 @@ async function addLink(conversation, ctx) {
       if (await checkIfValidURL(url)) {
         isValidURL = true;
         //check if url is already in the database
-        let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
         db.all(`SELECT url FROM Links WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
           if (err) {
             console.log(err);
@@ -576,9 +590,9 @@ async function createInitialSetsForPatrol(chatID) {
 }
 
 async function setPatrolState(chatID, patrolState) {
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
-          let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
           db.run(
               'UPDATE Users SET patrolActive = ? WHERE chatID = ?;',
               [patrolState, chatID],
@@ -602,6 +616,7 @@ async function setPatrolState(chatID, patrolState) {
 
 // Function to check for expired subscriptions and stop the patrol if expired
 async function checkForExpiredSubscriptions() {
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   try {
     const currentTime = new Date().toISOString();  // Get current time in ISO format
     db.all(`SELECT chatID FROM Users WHERE patrolActive = TRUE
@@ -624,6 +639,8 @@ async function checkForExpiredSubscriptions() {
     });
   } catch (error) {
     console.log(`❌ Error checking for expired subscriptions: ${error.message}`);
+  } finally {
+    db.close();
   }
 }
 
@@ -648,6 +665,7 @@ async function drawMainMenu(ctx) {
   console.log(`❌ Global Error starting patrol: ${err.message}`);
   console.log(err.stack);
 }
+
 
 // Function to send Telegram message
 export async function sendMessage(chatId, message) {

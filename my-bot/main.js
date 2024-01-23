@@ -16,10 +16,10 @@ const patrolData = new Map();
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
 try {
   bot.use(session({ initial: createInitialSessionData }));
-  bot.use(conversations(collectUserEmail, addLink, subscribeUser));
+  bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
-  bot.use(createConversation(subscribeUser));
+  //bot.use(createConversation(subscribeUser));
   let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
@@ -131,7 +131,7 @@ bot.command("subscribe", async (ctx) => {
           await ctx.conversation.enter("collectUserEmail");
         }
       });
-      await ctx.conversation.enter("subscribeUser");
+      //await ctx.conversation.enter("subscribeUser");
     } else {
       ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
     }
@@ -540,32 +540,32 @@ async function addLink(conversation, ctx) {
 }
 
 // conversation handler to subscribe user with stripe good-better-best pricing
-async function subscribeUser(conversation, ctx) {
-  try {
-    // show client pricing table in the bot using html markup provided by stripe
-    ctx.replyWithHTML(c.get('stripe.pricingTable'));
+// async function subscribeUser(conversation, ctx) {
+//   try {
+//     // show client pricing table in the bot using html markup provided by stripe
+//     ctx.replyWithHTML(c.get('stripe.pricingTable'));
 
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price: c.get('stripe.priceId'),
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      success_url: `${c.get('stripe.successUrl')}`,
-      cancel_url: `${c.get('stripe.cancelUrl')}`,
-      customer_email: ctx.session.userEmail,
-    });
-    // send stripe session id to user
-    ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
-  } catch (error) {
-    console.log(`❌ Error subscribing user: ${error.message}`);
-    console.log(error.stack);
-  }
-}
+//     const session = await stripe.checkout.sessions.create({
+//       payment_method_types: ['card'],
+//       line_items: [
+//         {
+//           price: c.get('stripe.priceId'),
+//           quantity: 1,
+//         },
+//       ],
+//       mode: 'subscription',
+//       success_url: `${c.get('stripe.successUrl')}`,
+//       cancel_url: `${c.get('stripe.cancelUrl')}`,
+//       customer_email: ctx.session.userEmail,
+//     });
+//     // send stripe session id to user
+//     ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
+//   } catch (error) {
+//     console.log(`❌ Error subscribing user: ${error.message}`);
+//     console.log(error.stack);
+//   }
+// }
 
 
 

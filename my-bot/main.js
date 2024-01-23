@@ -81,6 +81,7 @@ setInterval(checkForExpiredSubscriptions, 86400000);
 
 //when bot is initially added by a new user, prompt for email address
 bot.command("start", async (ctx) => {
+  try {
   //check if chat is private
   if (ctx.chat.type === "private") {
     //let emailCollected = false;
@@ -98,6 +99,10 @@ bot.command("start", async (ctx) => {
   else {
     ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
   }
+} catch (error) {
+  console.log(`❌ Error starting bot on /start callback: ${error.message}`);
+  console.log(error.stack);
+}
 });
 
 // You can now register listeners on your bot object `bot`.
@@ -110,7 +115,6 @@ bot.catch((err) => {
 
 // help command to display available commands
 bot.command("menu", async (ctx) => {
-  console.log("ChatID: " + ctx.message.chat.id);
   drawMainMenu(ctx);
 });
 

@@ -16,10 +16,10 @@ const patrolData = new Map();
 const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
 try {
   bot.use(session({ initial: createInitialSessionData }));
-  bot.use(conversations(collectUserEmail, addLink, subscribeUser));
+  bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
-  bot.use(createConversation(subscribeUser));
+  //bot.use(createConversation(subscribeUser));
   let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
@@ -131,7 +131,7 @@ bot.command("subscribe", async (ctx) => {
           await ctx.conversation.enter("collectUserEmail");
         }
       });
-      await ctx.conversation.enter("subscribeUser");
+      //await ctx.conversation.enter("subscribeUser");
     } else {
       ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
     }
@@ -146,7 +146,7 @@ bot.command("subscribe", async (ctx) => {
 
 // Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   try {
   const myLinks = [];
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
@@ -196,7 +196,7 @@ bot.command("addlink", async (ctx) => {
 
 //pass interval id to start command to be able to stop the interval
 bot.command("patrol", async (ctx) => {
-  const db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  const db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   try {
     //check if patrolData for given chatID have been initialized
     if (!patrolData.has(ctx.message.chat.id)) {
@@ -302,7 +302,7 @@ bot.on("message", (ctx) => ctx.reply("Got another message but it's not a command
 
 // Handle callback queries for button presses in showlinks command
 bot.callbackQuery(/delete_(\d+)/, (ctx) => {
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   try {
     const index = parseInt(ctx.match[1]);
     console.log("Index: " + index);
@@ -346,7 +346,7 @@ function createInitialSessionData() {
 
 // Check if user is in the database
 async function checkIfUserExists(chatID) {
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
           db.all(
@@ -409,7 +409,7 @@ async function confirmEmail(conversation, ctx, email) {
 }
 
 async function checkIfInDb(email, chatID) {
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
           db.all(
@@ -439,7 +439,7 @@ async function collectUserEmail(conversation, ctx) {
   let userEmail;
   let isValidEmail = false;
   let userExists = false;
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
     try {
     while (!isValidEmail && !userExists) {
       userEmail = await getValidEmail(conversation, ctx);
@@ -491,7 +491,7 @@ async function collectUserEmail(conversation, ctx) {
 async function addLink(conversation, ctx) {
   let isValidURL = false;
   let url;
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
     try {
     while (!isValidURL) {
       const { message } = await conversation.wait();
@@ -540,32 +540,32 @@ async function addLink(conversation, ctx) {
 }
 
 // conversation handler to subscribe user with stripe good-better-best pricing
-async function subscribeUser(conversation, ctx) {
-  try {
-    // show client pricing table in the bot using html markup provided by stripe
-    ctx.replyWithHTML(c.get('stripe.pricingTable'));
+// async function subscribeUser(conversation, ctx) {
+//   try {
+//     // show client pricing table in the bot using html markup provided by stripe
+//     ctx.replyWithHTML(c.get('stripe.pricingTable'));
 
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price: c.get('stripe.priceId'),
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      success_url: `${c.get('stripe.successUrl')}`,
-      cancel_url: `${c.get('stripe.cancelUrl')}`,
-      customer_email: ctx.session.userEmail,
-    });
-    // send stripe session id to user
-    ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
-  } catch (error) {
-    console.log(`❌ Error subscribing user: ${error.message}`);
-    console.log(error.stack);
-  }
-}
+//     const session = await stripe.checkout.sessions.create({
+//       payment_method_types: ['card'],
+//       line_items: [
+//         {
+//           price: c.get('stripe.priceId'),
+//           quantity: 1,
+//         },
+//       ],
+//       mode: 'subscription',
+//       success_url: `${c.get('stripe.successUrl')}`,
+//       cancel_url: `${c.get('stripe.cancelUrl')}`,
+//       customer_email: ctx.session.userEmail,
+//     });
+//     // send stripe session id to user
+//     ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
+//   } catch (error) {
+//     console.log(`❌ Error subscribing user: ${error.message}`);
+//     console.log(error.stack);
+//   }
+// }
 
 
 
@@ -594,7 +594,7 @@ async function createInitialSetsForPatrol(chatID) {
 }
 
 async function setPatrolState(chatID, patrolState) {
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
           db.run(
@@ -620,7 +620,7 @@ async function setPatrolState(chatID, patrolState) {
 
 // Function to check for expired subscriptions and stop the patrol if expired
 async function checkForExpiredSubscriptions() {
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
   try {
     const currentTime = new Date().toISOString();  // Get current time in ISO format
     db.all(`SELECT chatID FROM Users WHERE patrolActive = TRUE

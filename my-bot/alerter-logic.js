@@ -55,6 +55,7 @@ export const fetchLinks = async (userLink) => {
 export const parseForTopID = ($, userLink) => {
   try {
     const ulElements = $('ul[data-testid="srp-search-list"]');
+    console.log("ULELEMENTS length: " + ulElements.length);
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
       const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
@@ -88,26 +89,27 @@ export const generateInitialSetForPatrol = ($, userLink) => {
   let initialSetForPatrol = new Set();
   try {
     const ulElements = $('ul[data-testid="srp-search-list"]');
+
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
       const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
       const prices = targetUl.find('p[data-testid="listing-price"]');
       const liItem = targetListing.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
-      console.log("liItem: " + liItem.text());
       targetUl.find('a[data-testid="listing-link"]').slice(0, 4).each((i, element) => {
-      const href = element.attribs["href"];
-      if (i === 0) {
-        userLink.price = prices.eq(0).text();
-        userLink.attr1 = liItem.eq(0).text() || "N/A";
-        userLink.attr2 = liItem.eq(1).text() || "N/A";
-        userLink.newAdUrl = "https://www.kijiji.ca" + href;
-        console.log("Price!: " + userLink.price);
-        console.log("Attr1!: " + userLink.attr1);
-        console.log("Attr2!: " + userLink.attr2);
-      }
-      const id = href.substring(href.lastIndexOf("/") + 1);
-      initialSetForPatrol.add(id);
-    });
+        const href = element.attribs["href"];
+        if (i === 0) {
+          userLink.price = prices.eq(0).text();
+          userLink.attr1 = liItem.eq(0).text() || "N/A";
+          userLink.attr2 = liItem.eq(1).text() || "N/A";
+          userLink.newAdUrl = "https://www.kijiji.ca" + href;
+          console.log("Price!: " + userLink.price);
+          console.log("Attr1!: " + userLink.attr1);
+          console.log("Attr2!: " + userLink.attr2);
+        }
+        const id = href.substring(href.lastIndexOf("/") + 1);
+        initialSetForPatrol.add(id);
+      });
+    console.log("Initial Set: " + Array.from(initialSetForPatrol));
   } else {
     console.log("No ul elements found");
   }
@@ -115,6 +117,7 @@ export const generateInitialSetForPatrol = ($, userLink) => {
   return initialSetForPatrol;
   } catch (error) {
     console.log(`❌ Error in generateInitialSetForPatrol: ${error.message}`);
+    console.log(`❌ Error in generateInitialSetForPatrol: ${error.stack}`);
     return initialSetForPatrol;
   }
 }

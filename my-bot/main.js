@@ -14,13 +14,13 @@ import stripe from 'stripe';
 
 const patrolData = new Map();
 const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
 try {
   bot.use(session({ initial: createInitialSessionData }));
   bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
   //bot.use(createConversation(subscribeUser));
-  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
     JOIN Links ON Users.chatID = Links.chatID
@@ -34,7 +34,7 @@ try {
   });
   db.close();
     // Process the db query results and populate patrolData map
-    rows.forEach(async (row) => {
+    rows.forEach((row) => {
       const { chatID, expDate, url, tier } = row;
       // If chatID is not in patrolData hashmap, add a new entry to hashmap
       if (!patrolData.has(chatID)) {
@@ -50,10 +50,9 @@ try {
         chatId: chatID,
       });
     });
-  console.log("patrolData: " + JSON.stringify(patrolData));
 // Iterate through all values in patrolData
-patrolData.forEach( async (data, chatID) => {
-  await createInitialSetsForPatrol(chatID);
+patrolData.forEach( (data, chatID) => {
+  createInitialSetsForPatrol(chatID);
   console.log("data.userLinks.length: " + data.userLinks.length);
   if (data.userLinks.length > 0) {
     console.log("Tier: " + data.tier);
@@ -581,6 +580,7 @@ async function createInitialSetsForPatrol(chatID) {
       const $ = cheerio.load(HTMLresponse.data);
       console.log(`Fetching ${userLink.url}`);
       userLink.topLinks = generateInitialSetForPatrol($, userLink);
+      console.log("userLink.topLinks: " + JSON.stringify(userLink.topLinks));
       return userLink;
       // const topResultsString = await processSearch(link);
       // //console.log("topResultsObj: " + JSON.stringify(topResultsObj));

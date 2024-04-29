@@ -1,21 +1,37 @@
-import { sendMessage, addedToSetWithLimit } from './main.js';
-import fs from 'fs';
-import axios from 'axios';
+import { sendMessage, addedToSetWithLimit, refreshPage } from './main.js';
 import cheerio from 'cheerio';
-import c from 'config';
 
-export async function checkURLs(links) {
+export async function checkURLs(links, browser) {
+  const startTimestamp = performance.now();
+  try {
   console.log(`🕵️ Checking for updates...`);
-  await Promise.all(links.map(huntForChanges));
+  const maxConcurrency = 3;
+  const chunks = [];
+  for (let i = 0; i < links.length; i += maxConcurrency) {
+    chunks.push(links.slice(i, i + maxConcurrency));
+  }
+
+    await Promise.all(
+      chunks.map(async chunk => {
+        await Promise.all(chunk.map(link => huntForChanges(link, browser)));
+      })
+    );
+    //links.length = 0;
+    chunks.length = 0;
+  } catch (error) {
+    console.error(`Error during URL checking: ${error}`);
+    // Handle the error as needed
+  }
+  const endTimestamp = performance.now();
+  const completionTime = endTimestamp - startTimestamp;
+  console.log(`Execution completed in  ${completionTime / 1000} seconds.`);
 }
 
-async function huntForChanges(userLink) {
+async function huntForChanges(userLink, browser) {
   try {
-    const topID = await fetchLinks(userLink);
+    const topID = await fetchLink(userLink, browser);
     if (!topID) {
-      const error = `❌ Error: topLinks is undefined for user: ${userLink.chatID}, url: ${userLink.url}`;
-      console.log(error);
-      return;
+      throw new Error(`❌ Could not fetch ${userLink.url}`);
     }
     const addedToSet = await addedToSetWithLimit(userLink.topLinks, topID);
 
@@ -33,18 +49,17 @@ async function huntForChanges(userLink) {
   }
 }
 
-export const fetchLinks = async (userLink) => {
+export const fetchLink = async (userLink, browser) => {
   try {
-    const HTMLresponse = await axios.get(userLink.url);
-    if (HTMLresponse.status !== 200) {
-      console.log(`Error fetching ${userLink.url}: ${HTMLresponse.status}`);
-      return "";
+    const HTMLresponse = await refreshPage(browser, userLink);
+    if (!HTMLresponse) {
+      throw new Error(`❌ Could not refresh ${userLink.url}`);
+    } else {
+      const $ = cheerio.load(HTMLresponse);
+      console.log(`Refreshing and parsing ${userLink.url}`);
+      const topID = parseForTopID($, userLink);
+      return topID;
     }
-    const $ = cheerio.load(HTMLresponse.data);
-    console.log(`Fetching ${userLink.url}`);
-    // return the the most recent top ad id if there is one
-    const topID = await parseForTopID($, userLink);
-    return topID;
   } catch (err) {
     console.log(`❌ Could not complete fetch of ${userLink.url}: ${err}`);
     return "";
@@ -127,9 +142,13 @@ export const buildMessage = (userLink) => {
   return `${userLink.newAdUrl}\nPrice: ${userLink.price}\nAttr1: ${userLink.attr1}\nAttr2: ${userLink.attr2}`;
 }
 
+
+
 export default {
   checkURLs,
-  fetchLinks,
+  fetchLink,
   huntForChanges,
-  buildMessage
+  buildMessage,
+  parseForTopID,
+  generateInitialSetForPatrol
 }

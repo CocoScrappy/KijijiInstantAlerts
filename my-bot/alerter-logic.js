@@ -1,10 +1,11 @@
+import c from 'config';
 import { sendMessage, addedToSetWithLimit, refreshPage } from './main.js';
 import cheerio from 'cheerio';
 
 export async function checkURLs(links, browser) {
   const startTimestamp = performance.now();
   try {
-  console.log(`🕵️ Checking for updates...`);
+  console.log(`🕵️ Checking..`);
   const maxConcurrency = 3;
   const chunks = [];
   for (let i = 0; i < links.length; i += maxConcurrency) {
@@ -38,10 +39,9 @@ async function huntForChanges(userLink, browser) {
     if (addedToSet) {
       const response = buildMessage(userLink);
       sendMessage(userLink.chatId, response);
-      console.log(`💡 There is a new post!`);
-      console.log(`📝 Top ads: ${ Array.from(userLink.topLinks)}`);
+      console.log(`💡 There is a new post! Top ads: ${ Array.from(userLink.topLinks)}`);
     } else {
-      console.log(`😓 Nothing to report on your search for ${userLink.url.split('/')[5]}.`);
+      //console.log(`😓 Nothing to report on your search for ${userLink.url}.`);
     }
   } catch (error) {
     console.log(`❌ Error: ${error.message}`);
@@ -56,7 +56,7 @@ export const fetchLink = async (userLink, browser) => {
       throw new Error(`❌ Could not refresh ${userLink.url}`);
     } else {
       const $ = cheerio.load(HTMLresponse);
-      console.log(`Refreshing and parsing ${userLink.url}`);
+      //console.log(`Refreshing and parsing ${userLink.url}`);
       const topID = parseForTopID($, userLink);
       return topID;
     }
@@ -70,22 +70,28 @@ export const fetchLink = async (userLink, browser) => {
 export const parseForTopID = ($, userLink) => {
   try {
     const ulElements = $('ul[data-testid="srp-search-list"]');
-    console.log("ULELEMENTS length: " + ulElements.length);
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
       const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
-      const prices = targetUl.find('p[data-testid="listing-price"]');
+      const prices = targetUl.find('p[data-testid*="listing-price"]');
       const href = targetListing.find('a[data-testid="listing-link"]').eq(0).attr("href");
-      const liItem = targetListing.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
-      console.log("liItem: " + liItem.text());
+      const liItem = targetListing.find('ul[data-testid*="list-non-mobile"]').children('li');
+      const divItem = targetListing.find('div[data-testid*="autos-attribute"]').children('p');
       if (href) {
         userLink.price = prices.eq(0).text();
-        userLink.attr1 = liItem.eq(0).text() || "N/A";
-        userLink.attr2 = liItem.eq(1).text() || "N/A";
+        userLink.attr1 = "";
+        userLink.attr2 = "";
+        if (liItem.eq(0).text()) {
+          userLink.attr1 = liItem.eq(0).text().concat(" | " + liItem.eq(1).text());
+        }
+        //console.log("divItem: " + divItem.eq(0).text());
+        if (divItem.eq(0).text()) {
+          userLink.attr2 = divItem.eq(0).text().concat(" " + divItem.eq(1).text());
+        }
         userLink.newAdUrl = "https://www.kijiji.ca" + href;
-        console.log("Price!: " + userLink.price);
-        console.log("Attr1!: " + userLink.attr1);
-        console.log("Attr2!: " + userLink.attr2);
+        // console.log("Price!: " + userLink.price);
+        // console.log("Attr1!: " + userLink.attr1);
+        // console.log("Attr2!: " + userLink.attr2);
         const id = href.substring(href.lastIndexOf("/") + 1);
         return id;
       } 
@@ -108,23 +114,30 @@ export const generateInitialSetForPatrol = ($, userLink) => {
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
       const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
-      const prices = targetUl.find('p[data-testid="listing-price"]');
-      const liItem = targetListing.find('ul[data-testid="attribute-list-non-mobile"]').children('li');
+      const prices = targetUl.find('p[data-testid*="listing-price"]');
+      const liItem = targetListing.find('ul[data-testid*="list-non-mobile"]').children('li');
+      const divItem = targetListing.find('div[data-testid*="autos-attribute"]').children('p');
       targetUl.find('a[data-testid="listing-link"]').slice(0, 4).each((i, element) => {
         const href = element.attribs["href"];
         if (i === 0) {
           userLink.price = prices.eq(0).text();
-          userLink.attr1 = liItem.eq(0).text() || "N/A";
-          userLink.attr2 = liItem.eq(1).text() || "N/A";
+          userLink.attr1 = "";
+          userLink.attr2 = "";
+          if (liItem.eq(0).text()) {
+            userLink.attr1 = liItem.eq(0).text().concat(" | " + liItem.eq(1).text());
+          }
+          if (divItem.eq(0).text()) {
+            userLink.attr2 = divItem.eq(0).text().concat(" | " + divItem.eq(1).text());
+          }
           userLink.newAdUrl = "https://www.kijiji.ca" + href;
-          console.log("Price!: " + userLink.price);
-          console.log("Attr1!: " + userLink.attr1);
-          console.log("Attr2!: " + userLink.attr2);
+          // console.log("Price!: " + userLink.price);
+          // console.log("Attr1!: " + userLink.attr1);
+          // console.log("Attr2!: " + userLink.attr2);
         }
         const id = href.substring(href.lastIndexOf("/") + 1);
         initialSetForPatrol.add(id);
       });
-    console.log("Initial Set: " + Array.from(initialSetForPatrol));
+    //console.log("Initial Set: " + Array.from(initialSetForPatrol));
   } else {
     console.log("No ul elements found");
   }
@@ -138,8 +151,8 @@ export const generateInitialSetForPatrol = ($, userLink) => {
 }
 
 export const buildMessage = (userLink) => {
-  console.log("Build Message -> search Object!: " + JSON.stringify(userLink));
-  return `${userLink.newAdUrl}\nPrice: ${userLink.price}\nAttr1: ${userLink.attr1}\nAttr2: ${userLink.attr2}`;
+  // console.log("Build Message -> search Object!: " + JSON.stringify(userLink));
+  return `${userLink.newAdUrl}\nPrice: ${userLink.price}\nInfo: ${userLink.attr1} ${userLink.attr2}`;
 }
 
 

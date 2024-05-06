@@ -122,7 +122,7 @@ try {
     }
     patrolData.get(chatID).userLinks.push({
       url: url,// search filter url
-      browserPageTargetId: "",// tab target id
+      //browserPageTargetId: "",// tab target id
       topLinks: new Set(),// set of top 5 ad ids
       price: "",
       attr1: "",
@@ -313,7 +313,7 @@ bot.command("patrol", async (ctx) => {
     for (const row of rows) {
       patrolData.get(ctx.message.chat.id).userLinks.push({
         url: row.url,
-        browserPageTargetId: "", // tab target id
+        //browserPageTargetId: "", // tab target id
         topLinks: new Set(), // set of top 5 ad ids
         price: "",
         attr1: "",
@@ -669,36 +669,30 @@ async function createInitialSetsForPatrol(chatID, browser) {
   try {
     await Promise.all(patrolData.get(chatID).userLinks.map(async (userLink) => {
       // Navigate to the URL
-      const page = await browser.newPage();
-      // Enable interception feature
-      await page.setRequestInterception(true);
-      // then we can add a call back which inspects every outgoing request browser makes and decides whether to allow it
-      page.on('request', (request) => {
-        // Check if the request is for a resource type that we want to block
-        const requestUrl = request.url();
-        const resourceType = request.resourceType();
-        if (blockResourceType.includes(resourceType) || blockResourceName.some(name => requestUrl.includes(name))) {
-          request.abort();
-        } else {
-          request.continue();
-        }
-      });
+      const page = await browser.browserContexts()[0].newPage();
+      // Optimize page method to block unnecessary requests
+      await optimizePage(page);
 
-      //record target id for the page into userLink object using Puppeteer's page.target() method
-      userLink.browserPageTargetId = page.target()._targetId;
-      try {
-        page.goto(userLink.url);
-        await page.waitForSelector('ul[data-testid="srp-search-list"]', { timeout: 10000 });
-        // Get the HTML content
-        const HTMLresponse = await page.content();
-        const $ = cheerio.load(HTMLresponse);
-        console.log(`Fetching ${userLink.url}`);
-        userLink.topLinks = generateInitialSetForPatrol($, userLink);
-        console.log("userLink.topLinks: " + JSON.stringify(userLink.topLinks));
-      } catch (error) {
-        console.log(`Error fetching ${userLink.url}: ${error.message}`);
+      // //record target id for the page into userLink object using Puppeteer's page.target() method
+      // userLink.browserPageTargetId = page.target()._targetId;
+      //page.goto(userLink.url);
+      await page.goto(userLink.url, { waitUntil: 'domcontentloaded' }); // Navigate to the URL and wait until DOM content is loaded
+      //if selector is not found, close the page and return empty string
+      const pageLoaded = await page.waitForSelector('ul[data-testid="srp-search-list"]', { timeout: 10000 }).then(() => true).catch(() => false);
+      if (!pageLoaded) {
+        console.error('Page did not load successfully.');
+        page.close();
+        return "";
       }
-      
+
+      // Get the HTML content
+      const HTMLresponse = await page.content();
+      const $ = cheerio.load(HTMLresponse);
+      console.log(`Fetching ${userLink.url}`);
+      userLink.topLinks = generateInitialSetForPatrol($, userLink);
+      console.log("userLink.topLinks: " + JSON.stringify(userLink.topLinks));
+      page.removeAllListeners();
+      page.close();
       return userLink;
     }));
   } catch (error) {
@@ -825,32 +819,48 @@ export async function addedToSetWithLimit(mySet, element) {
 }
 
 export async function refreshPage(browser, userLink) {
-    try {
-    const target = await browser.browserContexts()[0].targets().find(target => target._targetId === userLink.browserPageTargetId);
-    // // Find the page using the targetId
-    const targetPage = await target.page();
-    //open a new page in a browser from browser and userLink parameters
-    //const targetPage = await browser.newPage(userLink.url);
-    if (!targetPage) {
-      throw new Error('Error opening a page.');
-    }
-    targetPage.reload(/*{ waitUntil : ["networkidle0", "domcontentloaded"] }*/);
-    // Check if the page has reloaded successfully
-    const pageLoaded = await targetPage.waitForSelector('ul[data-testid="srp-search-list"]', { timeout: 10000 }).then(() => true).catch(() => false);
-    if (!pageLoaded) {
-      console.error('Page did not reload successfully.');
-      //targetPage.close();
-      return "";
-    }
+  let targetPage;
+  try {
+      // const target = await browser.browserContexts()[0].targets().find(target => target._targetId === userLink.browserPageTargetId);
+       targetPage = await browser.browserContexts()[0].newPage();
+      await optimizePage(targetPage);
+      await targetPage.goto(userLink.url, { waitUntil: 'domcontentloaded' }); // Navigate to the URL and wait until DOM content is loaded
+      if (!targetPage) {
+        await targetPage.close();
+        throw new Error('Error opening a page.');
+      }
 
-    // Get the HTML content after refreshing
-    const HTMLResponse = await targetPage.content();
-    // // Close the page
-    // await targetPage.close();
-    // Return the refreshed HTML content
-    return HTMLResponse;
+      const pageLoaded = await targetPage.waitForSelector('ul[data-testid="srp-search-list"]', { timeout: 10000 }).then(() => true).catch(() => false);
+      if (!pageLoaded) {
+        console.error('Page did not reload successfully.');
+        targetPage.close();
+        return "";
+      }
+
+      // Get the HTML content after refreshing
+      const HTMLResponse = await targetPage.content();
+      await targetPage.close();
+      return HTMLResponse;
   } catch (error) {
     console.error(`Error refreshing page: ${error.message}`);
+    targetPage.close();
     return "";
   }
+}
+
+export async function optimizePage(page) {
+    // Enable interception feature
+    await page.setRequestInterception(true);
+    // then we can add a call back which inspects every outgoing request browser makes and decides whether to allow it
+    page.on('request', (request) => {
+      // Check if the request is for a resource type that we want to block
+      const requestUrl = request.url();
+      const resourceType = request.resourceType();
+      if (blockResourceType.includes(resourceType) || blockResourceName.some(name => requestUrl.includes(name))) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    }
+    );
 }

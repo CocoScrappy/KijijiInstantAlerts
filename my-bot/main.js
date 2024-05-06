@@ -1,26 +1,105 @@
 import { Bot, session, Keyboard } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
-import { fetchLinks, checkURLs, generateInitialSetForPatrol } from './alerter-logic.js';
-import axios from 'axios';
+import { fetchLink, checkURLs, generateInitialSetForPatrol } from './alerter-logic.js';
 import cheerio from 'cheerio';
-import config from './config.js';
 import sqlite3 from 'sqlite3';
 import { InlineKeyboard } from 'grammy';  // Import InlineKeyboard
 import { checkIfValidURL, checkIfValidEmail } from './middleware/validators.js';
-import c from 'config';
 import stripe from 'stripe';
-
-// Create an instance of the `Bot` class and pass your bot token to it.
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const patrolData = new Map();
-const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
+// Create an instance of the `Bot` class and pass your bot token to it.
+const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+// Create a new browser instance
+let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+
+let browser;
+
+// block by resrouce type like fonts, images etc.
+const blockResourceType = [
+  'beacon',
+  'csp_report',
+  'font',
+  'image',
+  'imageset',
+  'media',
+  'object',
+  'texttrack',
+  'stylesheet', 
+];
+// block by domains, like google-analytics etc.
+const blockResourceName = [
+  'adition',
+  'adzerk',
+  'analytics',
+  'cdn.api.twitter',
+  'clicksor',
+  'clicktale',
+  'doubleclick',
+  'exelator',
+  'facebook',
+  'fontawesome',
+  'google',
+  'google-analytics',
+  'googletagmanager',
+  'mixpanel',
+  'optimizely',
+  'quantserve',
+  'sharethrough',
+  'tiqcdn',
+  'zedo',
+];
 try {
   bot.use(session({ initial: createInitialSessionData }));
   bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
+
+  puppeteer.use(StealthPlugin());
+
+  // Launch Puppeteer
+  browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Application specific logging, throwing an error, or other logic here
+  });
+
+  process.on('SIGINT', async () => {
+    try {
+      if (browser) {
+        await browser.close();
+        console.log('Browser instance closed');
+      }
+    } catch (error) {
+      console.error('Error closing browser instance:', error);
+    } finally {
+      process.exit(0);
+    }
+  });
+  
+  process.on('SIGTERM', async () => {
+    try {
+      if (browser) {
+        await browser.close();
+        console.log('Browser instance closed');
+      }
+    } catch (error) {
+      console.error('Error closing browser instance:', error);
+    } finally {
+      process.exit(0);
+    }
+  });
+
+
   //bot.use(createConversation(subscribeUser));
-  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
     JOIN Links ON Users.chatID = Links.chatID
@@ -33,45 +112,49 @@ try {
     });
   });
   db.close();
-    // Process the db query results and populate patrolData map
-    rows.forEach(async (row) => {
-      const { chatID, expDate, url, tier } = row;
-      // If chatID is not in patrolData hashmap, add a new entry to hashmap
-      if (!patrolData.has(chatID)) {
-        patrolData.set(chatID, { userInterval: null, expDate: expDate, userLinks: [], tier: tier });
-      }
-      patrolData.get(chatID).userLinks.push({
-        url: url,// search filter url
-        topLinks: new Set(),// set of top 5 ad ids
-        price: "",
-        attr1: "",
-        attr2: "",
-        newAdUrl: "",
-        chatId: chatID,
-      });
-    });
-  console.log("patrolData: " + JSON.stringify(patrolData));
-// Iterate through all values in patrolData
-patrolData.forEach( async (data, chatID) => {
-  await createInitialSetsForPatrol(chatID);
-  console.log("data.userLinks.length: " + data.userLinks.length);
-  if (data.userLinks.length > 0) {
-    console.log("Tier: " + data.tier);
-  if (data.tier === 0 || data.tier === 3) {
-    data.userInterval = setInterval( async () => checkURLs(data.userLinks), 
-    process.env.CHECK_INTERVAL_MS_HIGH || 600000);
-  } else if (data.tier === 1) {
-    data.userInterval = setInterval( async () => checkURLs(data.userLinks), 
-    process.env.CHECK_INTERVAL_MS_MID || 600000);
-  } else if (data.tier === 2) {
-    data.userInterval = setInterval( async () => checkURLs(data.userLinks), 
-    process.env.CHECK_INTERVAL_MS_LOW || 600000);
-  }
-} else {
-  console.log("No links for chatID: " + chatID);
-}
-});
 
+  // Process the db query results and populate patrolData map
+  rows.forEach((row) => {
+    const { chatID, expDate, url, tier } = row;
+    // If chatID is not in patrolData hashmap, add a new entry to hashmap
+    if (!patrolData.has(chatID)) {
+      patrolData.set(chatID, { userInterval: null, expDate: expDate, userLinks: [], tier: tier });
+    }
+    patrolData.get(chatID).userLinks.push({
+      url: url,// search filter url
+      //browserPageTargetId: "",// tab target id
+      topLinks: new Set(),// set of top 5 ad ids
+      price: "",
+      attr1: "",
+      attr2: "",
+      newAdUrl: "",
+      chatId: chatID,
+    });
+  });
+  
+  (async () => {
+    // Iterate through all values in patrolData
+    // patrolData.forEach( async (data, chatID) => {
+    for (const [chatID, data] of patrolData) {
+      await createInitialSetsForPatrol(chatID, browser);
+      console.log("data.userLinks.length: " + data.userLinks.length);
+      // If there are links to patrol, start the interval
+      if (data.userLinks.length > 0) {
+      if (data.tier === 0 || data.tier === 3) {
+        data.userInterval = setInterval( () => checkURLs(data.userLinks, browser), 
+        process.env.CHECK_INTERVAL_MS_HIGH || 600000);
+      } else if (data.tier === 1) {
+        data.userInterval = setInterval( () => checkURLs(data.userLinks, browser), 
+        process.env.CHECK_INTERVAL_MS_MID || 600000);
+      } else if (data.tier === 2) {
+        data.userInterval = setInterval( () => checkURLs(data.userLinks, browser), 
+        process.env.CHECK_INTERVAL_MS_LOW || 600000);
+      }
+    } else {
+      console.log("No links for chatID: " + chatID);
+    }
+    };
+  })();
 
 // Start the bot -connect to the Telegram servers and wait for messages.
 bot.start();
@@ -110,7 +193,7 @@ bot.command("start", async (ctx) => {
 
 // Handle errors
 bot.catch((err) => {
-  console.log(`Error: ${err}`); // there was an error!
+  console.log(`!Error: ${err}`); // there was an error!
 });
 
 // help command to display available commands
@@ -140,9 +223,6 @@ bot.command("subscribe", async (ctx) => {
     console.log(error.stack);
   }
 });
-
-
-
 
 // Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
@@ -233,6 +313,7 @@ bot.command("patrol", async (ctx) => {
     for (const row of rows) {
       patrolData.get(ctx.message.chat.id).userLinks.push({
         url: row.url,
+        //browserPageTargetId: "", // tab target id
         topLinks: new Set(), // set of top 5 ad ids
         price: "",
         attr1: "",
@@ -242,19 +323,19 @@ bot.command("patrol", async (ctx) => {
       });
     }
 
-    await createInitialSetsForPatrol(ctx.message.chat.id);
+    await createInitialSetsForPatrol(ctx.message.chat.id, browser);
 
     try {
       let userInfo = patrolData.get(ctx.message.chat.id);
       // 600000ms = 10 minutes add interval with ctx.chat.id as key to userIntervals object to support multiple users
       if (userInfo.tier === 0 || userInfo.tier === 3) {
-        userInfo.userInterval = setInterval( () => checkURLs(userInfo.userLinks), 
+        userInfo.userInterval = setInterval( () => checkURLs(userInfo.userLinks, browser), 
         process.env.CHECK_INTERVAL_MS_HIGH || 600000);
       } else if (userInfo.tier === 1) {
-        userInfo.userInterval = setInterval( () => checkURLs(userInfo.userLinks), 
+        userInfo.userInterval = setInterval( () => checkURLs(userInfo.userLinks, browser), 
         process.env.CHECK_INTERVAL_MS_MID || 600000);
       } else if (userInfo.tier === 2) {
-        userInfo.userInterval = setInterval( () => checkURLs(userInfo.userLinks), 
+        userInfo.userInterval = setInterval( () => checkURLs(userInfo.userLinks, browser), 
         process.env.CHECK_INTERVAL_MS_LOW || 600000);
       }
       ctx.reply("🕵 Started Ad-Patrol...");
@@ -278,12 +359,27 @@ bot.command("patrol", async (ctx) => {
 // Command to stop the patrol
 bot.command("stop", async (ctx) => {
   try {
+    // Access the browser object appropriately
     if (patrolData.has(ctx.chat.id)) {
+      //TODO: close all browser tabs for the user (also await)
+      for (const userLink of patrolData.get(ctx.chat.id).userLinks) {
+        const target = await browser.browserContexts()[0].targets().find(target => target._targetId === userLink.browserPageTargetId);
+        
+        if (target) {
+          const page = await target.page();
+          if (page) {
+            //remove event listeners
+            page.removeAllListeners();
+            await page.close();
+          }
+        }
+      }
       clearInterval(patrolData.get(ctx.chat.id).userInterval);
       //set userInterval to null
       patrolData.get(ctx.chat.id).userInterval = null;
       // set patrolActive to false in database
       await setPatrolState(ctx.chat.id, false);
+
       // remove all links from userLinks array to prevent duplicate links in the array
       patrolData.get(ctx.chat.id).userLinks = [];
       console.log("🛑 Stopped Ad-Patrol...");
@@ -293,6 +389,7 @@ bot.command("stop", async (ctx) => {
     }
   } catch (error) {
     console.log(`❌ Error stopping patrol: ${error.message}`);
+    console.log(error.stack);
   }
   });
 
@@ -568,24 +665,35 @@ async function addLink(conversation, ctx) {
 // }
 
 
-
-async function createInitialSetsForPatrol(chatID) {
+async function createInitialSetsForPatrol(chatID, browser) {
   try {
-    Promise.all(patrolData.get(chatID).userLinks.map(async (userLink) => {
-      const HTMLresponse = await axios.get(userLink.url);
-      if (HTMLresponse.status !== 200) {
-        console.log(`Error fetching ${userLink.url}: ${HTMLresponse.status}`);
+    await Promise.all(patrolData.get(chatID).userLinks.map(async (userLink) => {
+      // Navigate to the URL
+      const page = await browser.browserContexts()[0].newPage();
+      // Optimize page method to block unnecessary requests
+      await optimizePage(page);
+
+      // //record target id for the page into userLink object using Puppeteer's page.target() method
+      // userLink.browserPageTargetId = page.target()._targetId;
+      //page.goto(userLink.url);
+      await page.goto(userLink.url, { waitUntil: 'domcontentloaded' }); // Navigate to the URL and wait until DOM content is loaded
+      //if selector is not found, close the page and return empty string
+      const pageLoaded = await page.waitForSelector('ul[data-testid="srp-search-list"]', { timeout: 10000 }).then(() => true).catch(() => false);
+      if (!pageLoaded) {
+        console.error('Page did not load successfully.');
+        page.close();
         return "";
       }
-      //parse HTML response
-      const $ = cheerio.load(HTMLresponse.data);
+
+      // Get the HTML content
+      const HTMLresponse = await page.content();
+      const $ = cheerio.load(HTMLresponse);
       console.log(`Fetching ${userLink.url}`);
       userLink.topLinks = generateInitialSetForPatrol($, userLink);
+      console.log("userLink.topLinks: " + JSON.stringify(userLink.topLinks));
+      page.removeAllListeners();
+      page.close();
       return userLink;
-      // const topResultsString = await processSearch(link);
-      // //console.log("topResultsObj: " + JSON.stringify(topResultsObj));
-      // link.hash = checksum(topResultsString);    
-      // return link;
     }));
   } catch (error) {
     console.log(`❌ Error creating initial hashes for patrol: ${error.message}`);
@@ -628,17 +736,32 @@ async function checkForExpiredSubscriptions() {
       if (error) {
         console.log(error);
       } else {
-        rows.forEach((row) => {
+          for (const row of rows) {
+          //rows.forEach((row) => {
           if (patrolData.has(row.chatID)) {
             clearInterval(patrolData.get(row.chatID).userInterval);
             delete patrolData.get(row.chatID).userInterval;
+            // close all browser tabs for the user
+            for (const userLink of patrolData.get(row.chatID).userLinks) {
+              async () => {
+            //patrolData.get(row.chatID).userLinks.forEach(async (userLink) => {
+              const target = await browser.browserContexts()[0].targets().find(target => target._targetId === userLink.browserPageTargetId);
+              if (target) {
+                const page = await target.page();
+                if (page) {
+                  //remove event listeners
+                  page.removeAllListeners();
+                  await page.close();
+                }
+              }
+            }};//);
             // set patrolActive to false in database
             setPatrolState(row.chatID, false);
             console.log("🛑 Stopped Ad-Patrol for chatID: " + row.chatID);
             // Send message to user
             sendMessage(row.chatID, "😞 Your subscription has expired. Please purchase a new subscription to continue patrolling these ads.");
           }
-        });
+        };//);
       }
     });
   } catch (error) {
@@ -693,4 +816,51 @@ export async function addedToSetWithLimit(mySet, element) {
   } else {
       return false;
   }
+}
+
+export async function refreshPage(browser, userLink) {
+  let targetPage;
+  try {
+      // const target = await browser.browserContexts()[0].targets().find(target => target._targetId === userLink.browserPageTargetId);
+       targetPage = await browser.browserContexts()[0].newPage();
+      await optimizePage(targetPage);
+      await targetPage.goto(userLink.url, { waitUntil: 'domcontentloaded' }); // Navigate to the URL and wait until DOM content is loaded
+      if (!targetPage) {
+        await targetPage.close();
+        throw new Error('Error opening a page.');
+      }
+
+      const pageLoaded = await targetPage.waitForSelector('ul[data-testid="srp-search-list"]', { timeout: 10000 }).then(() => true).catch(() => false);
+      if (!pageLoaded) {
+        console.error('Page did not reload successfully.');
+        targetPage.close();
+        return "";
+      }
+
+      // Get the HTML content after refreshing
+      const HTMLResponse = await targetPage.content();
+      await targetPage.close();
+      return HTMLResponse;
+  } catch (error) {
+    console.error(`Error refreshing page: ${error.message}`);
+    targetPage.close();
+    return "";
+  }
+}
+
+export async function optimizePage(page) {
+    // Enable interception feature
+    await page.setRequestInterception(true);
+    // then we can add a call back which inspects every outgoing request browser makes and decides whether to allow it
+    page.on('request', (request) => {
+      // Check if the request is for a resource type that we want to block
+      const requestUrl = request.url();
+      const resourceType = request.resourceType();
+      if (blockResourceType.includes(resourceType) || blockResourceName.some(name => requestUrl.includes(name))) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    }
+    );
 }

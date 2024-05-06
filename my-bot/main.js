@@ -13,9 +13,9 @@ dotenv.config();
 
 const patrolData = new Map();
 // Create an instance of the `Bot` class and pass your bot token to it.
-const bot = new Bot(process.env.BOT_TOKEN_DEV); // <-- put your bot token between the ""
+const bot = new Bot(process.env.BOT_TOKEN); // <-- put your bot token between the ""
 // Create a new browser instance
-let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
 
 let browser;
 
@@ -226,7 +226,7 @@ bot.command("subscribe", async (ctx) => {
 
 // Command to show all search URLs. SQLLite supports multiple read transactions but only one write transaction at a time.
 bot.command("showlinks", (ctx) => {
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   try {
   const myLinks = [];
   // query database for all links for specific chatid and put them into userLinks array with hash and chatid for each link to be used in checkURLs function
@@ -276,7 +276,7 @@ bot.command("addlink", async (ctx) => {
 
 //pass interval id to start command to be able to stop the interval
 bot.command("patrol", async (ctx) => {
-  const db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  const db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   try {
     //check if patrolData for given chatID have been initialized
     if (!patrolData.has(ctx.message.chat.id)) {
@@ -399,7 +399,7 @@ bot.on("message", (ctx) => ctx.reply("Got another message but it's not a command
 
 // Handle callback queries for button presses in showlinks command
 bot.callbackQuery(/delete_(\d+)/, (ctx) => {
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   try {
     const index = parseInt(ctx.match[1]);
     console.log("Index: " + index);
@@ -443,7 +443,7 @@ function createInitialSessionData() {
 
 // Check if user is in the database
 async function checkIfUserExists(chatID) {
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
           db.all(
@@ -506,7 +506,7 @@ async function confirmEmail(conversation, ctx, email) {
 }
 
 async function checkIfInDb(email, chatID) {
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
           db.all(
@@ -536,7 +536,7 @@ async function collectUserEmail(conversation, ctx) {
   let userEmail;
   let isValidEmail = false;
   let userExists = false;
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
     try {
     while (!isValidEmail && !userExists) {
       userEmail = await getValidEmail(conversation, ctx);
@@ -588,7 +588,7 @@ async function collectUserEmail(conversation, ctx) {
 async function addLink(conversation, ctx) {
   let isValidURL = false;
   let url;
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
     try {
     while (!isValidURL) {
       const { message } = await conversation.wait();
@@ -702,7 +702,7 @@ async function createInitialSetsForPatrol(chatID, browser) {
 }
 
 async function setPatrolState(chatID, patrolState) {
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   return new Promise((resolve, reject) => {
       try {
           db.run(
@@ -728,7 +728,7 @@ async function setPatrolState(chatID, patrolState) {
 
 // Function to check for expired subscriptions and stop the patrol if expired
 async function checkForExpiredSubscriptions() {
-  let db = new sqlite3.Database('./db/VovaVovaKijijiAlerter_db.db');
+  let db = new sqlite3.Database('./db/VovaKijijiAlerter_db.db');
   try {
     const currentTime = new Date().toISOString();  // Get current time in ISO format
     db.all(`SELECT chatID FROM Users WHERE patrolActive = TRUE

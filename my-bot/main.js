@@ -205,19 +205,19 @@ bot.command("menu", async (ctx) => {
 bot.command("subscribe", async (ctx) => {
   try {
     //check if chat is private
-    if (ctx.chat.type === "private") {
-      checkIfUserExists(ctx.message.chat.id).then(async (exists) => {
-        if (exists) {
-          return;
-        } else {
-          ctx.reply("Oops, you are not registered. Please provide an email address in case we need to contact you or troubleshoot an issue:");
-          await ctx.conversation.enter("collectUserEmail");
-        }
-      });
-      //await ctx.conversation.enter("subscribeUser");
-    } else {
-      ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
-    }
+    // if (ctx.chat.type === "private") {
+    //   checkIfUserExists(ctx.message.chat.id).then(async (exists) => {
+    //     if (exists) {
+    //       return;
+    //     } else {
+    //       ctx.reply("Oops, you are not registered. Please provide an email address in case we need to contact you or troubleshoot an issue:");
+    //       await ctx.conversation.enter("collectUserEmail");
+    //     }
+    //   });
+    //   //await ctx.conversation.enter("subscribeUser");
+    // } else {
+    //   ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
+    // }
   } catch (error) {
     console.log(`❌ Error subscribing user: ${error.message}`);
     console.log(error.stack);

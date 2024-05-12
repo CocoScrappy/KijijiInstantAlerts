@@ -171,11 +171,11 @@ bot.command("start", async (ctx) => {
     ctx.session.userLinks = [];
     ctx.session.expDate = "";
     await ctx.reply("Welcome to Kijiji Patrol Bot 🕵️‍♂️\n"+
-    "\nEverybody knows that good deals don't last long on Kijiji - delay responding by several minutes and somebody else already arranged to meet the seller.😔 BUT!\n" +
-    "\nYou can use me to solve this problem.😉 Whether you are looking for a new apartment, a vehicle or anything in between - I will monitor kijiji for you and notify you instantly once an ad that meets your criteria is posted.⚡" +
-    "\nIf used wisely, I can help you save hundreds of dollars. \n" +
-    "\nTry me out free for a month. You can buy additional time when you need, starting at $10/mo.\n" +
-    "\n➡️ To start, please provide Email address you could be reached at if needed:");
+    "\nGood deals don't last long on Kijiji - delay responding by 5 minutes and somebody already arranged to meet the seller.😔\n" +
+    "Use me to solve this problem! 😉 " +
+    "\nLooking for a new apartment to rent, a vehicle or anything in between? -> I will scan Kijiji and notify you instantly once someone posts something that meets your search criteria.⚡" +
+    "\nCompletely free for 2 months then buy additional time when you need, starting at $10/mo.\n" +
+    "\n\n➡️ To start, enter email address:");
     await ctx.conversation.enter("collectUserEmail");
 
   }

@@ -53,6 +53,13 @@ const blockResourceName = [
   'tiqcdn',
   'zedo',
 ];
+
+const SCAN_PERIODS = {
+  "Tier 1": 120,
+  "Tier 2": 60,
+  "Tier 3": 15
+};
+
 try {
   bot.use(session({ initial: createInitialSessionData }));
   bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
@@ -174,7 +181,7 @@ bot.command("start", async (ctx) => {
     "\nGood deals don't last long on Kijiji - delay responding by 5 minutes and somebody already arranged to meet the seller.😔\n" +
     "Use me to solve this problem! 😉 " +
     "\nLooking for a new apartment to rent, a vehicle or anything in between? -> I will scan Kijiji and notify you instantly once someone posts something that meets your search criteria.⚡" +
-    "\nCompletely free for 2 months then buy additional time when you need, starting at $10/mo.\n" +
+    "\nCompletely free for 2 months then you can get additional time when you need.\n" +
     "\n\n➡️ To start, enter email address:");
     await ctx.conversation.enter("collectUserEmail");
 
@@ -202,7 +209,7 @@ bot.command("menu", async (ctx) => {
 });
 
 // Command to subscribe to the bot
-bot.command("subscribe", async (ctx) => {
+bot.command("subscription", async (ctx) => {
   try {
     //check if chat is private
     if (ctx.chat.type === "private") {
@@ -214,10 +221,21 @@ bot.command("subscribe", async (ctx) => {
           await ctx.conversation.enter("collectUserEmail");
         }
       });
-      //await ctx.conversation.enter("subscribeUser");
+      drawSubscribeMenu;
+      //ctx.conversation.enter("subscribeUser");
     } else {
       ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
     }
+  } catch (error) {
+    console.log(`❌ Error subscribing user: ${error.message}`);
+    console.log(error.stack);
+  }
+});
+
+// Command to subscribe to the bot
+bot.command("subscribe", async (ctx) => {
+  try {
+    ctx.conversation.enter("subscribeUser");
   } catch (error) {
     console.log(`❌ Error subscribing user: ${error.message}`);
     console.log(error.stack);
@@ -455,7 +473,7 @@ async function checkIfUserExists(chatID) {
                   } else {
                       resolve(rows.length > 0);
                   }
-                  db.close();
+                  // db.close();
               }
           );
       } catch (error) {
@@ -637,32 +655,32 @@ async function addLink(conversation, ctx) {
 }
 
 // conversation handler to subscribe user with stripe good-better-best pricing
-// async function subscribeUser(conversation, ctx) {
-//   try {
-//     // show client pricing table in the bot using html markup provided by stripe
-//     ctx.replyWithHTML(c.get('stripe.pricingTable'));
+async function subscribeUser(conversation, ctx) {
+  try {
+  //   // show client pricing table in the bot using html markup provided by stripe
+  //   ctx.replyWithHTML(c.get('stripe.pricingTable'));
 
 
-//     const session = await stripe.checkout.sessions.create({
-//       payment_method_types: ['card'],
-//       line_items: [
-//         {
-//           price: c.get('stripe.priceId'),
-//           quantity: 1,
-//         },
-//       ],
-//       mode: 'subscription',
-//       success_url: `${c.get('stripe.successUrl')}`,
-//       cancel_url: `${c.get('stripe.cancelUrl')}`,
-//       customer_email: ctx.session.userEmail,
-//     });
-//     // send stripe session id to user
-//     ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
-//   } catch (error) {
-//     console.log(`❌ Error subscribing user: ${error.message}`);
-//     console.log(error.stack);
-//   }
-// }
+  //   const session = await stripe.checkout.sessions.create({
+  //     payment_method_types: ['card'],
+  //     line_items: [
+  //       {
+  //         price: c.get('stripe.priceId'),
+  //         quantity: 1,
+  //       },
+  //     ],
+  //     mode: 'subscription',
+  //     success_url: `${c.get('stripe.successUrl')}`,
+  //     cancel_url: `${c.get('stripe.cancelUrl')}`,
+  //     customer_email: ctx.session.userEmail,
+  //   });
+  //   // send stripe session id to user
+  //   ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
+  } catch (error) {
+    console.log(`❌ Error subscribing user: ${error.message}`);
+    console.log(error.stack);
+  }
+}
 
 
 async function createInitialSetsForPatrol(chatID, browser) {
@@ -778,13 +796,36 @@ async function drawMainMenu(ctx) {
   .text("/addlink ➕").row()
   .text("/patrol 🕵️‍♂️")
   .text("/stop 🛑")
-  .text("/subscribe 💵").row()
+  .text("/subscription 💵").row()
   .persistent()
   .resized() 
   ctx.reply(
     `You are in the main menu. Please select an option`,
     { reply_markup: menu }
   ); 
+}
+
+// Function to draw main menu
+async function drawSubscribeMenu(ctx) {
+  const currentTier = ctx.session.tier;
+  const scanPeriod = SCAN_PERIODS[currentTier] || 0; // Default to 0 if tier is not recognized
+  const subscribeMenu = new Keyboard()
+  .text("/subscribe 💵")
+  .text("/contact 📧").row()
+  .text("/menu 📃")
+  .persistent()
+  .resized() 
+  if (ctx.session.expDate < new Date().toISOString()) {
+    ctx.reply(
+      `Your subscription has expired on ${ctx.session.expDate}. Please select an option`,
+      { reply_markup: subscribeMenu }
+    );
+  } else {
+    ctx.reply(
+      `Your subscription expires on ${ctx.session.expDate}. Your current subscription tier is ${currentTier} (scan every ${scanPeriod} seconds). Please select an option`,
+      { reply_markup: subscribeMenu }
+  ); 
+}
 }
 
 

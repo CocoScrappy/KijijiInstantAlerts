@@ -55,6 +55,7 @@ const blockResourceName = [
 ];
 
 const SCAN_PERIODS = {
+  "Tier 0": 15,
   "Tier 1": 120,
   "Tier 2": 60,
   "Tier 3": 15
@@ -215,14 +216,16 @@ bot.command("subscription", async (ctx) => {
     if (ctx.chat.type === "private") {
       checkIfUserExists(ctx.message.chat.id).then(async (exists) => {
         if (exists) {
+          console.log("User exists. Drawing subscribe menu...");
+          drawSubscribeMenu(ctx);
           return;
         } else {
           ctx.reply("Oops, you are not registered. Please provide an email address in case we need to contact you or troubleshoot an issue:");
           await ctx.conversation.enter("collectUserEmail");
+          console.log("User does not exist. Drawing subscribe menu...");
+          drawSubscribeMenu(ctx);
         }
       });
-      drawSubscribeMenu;
-      //ctx.conversation.enter("subscribeUser");
     } else {
       ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
     }
@@ -657,25 +660,26 @@ async function addLink(conversation, ctx) {
 // conversation handler to subscribe user with stripe good-better-best pricing
 async function subscribeUser(conversation, ctx) {
   try {
-  //   // show client pricing table in the bot using html markup provided by stripe
-  //   ctx.replyWithHTML(c.get('stripe.pricingTable'));
 
+    // // show client buttons with 9 links to stripe checkout
+    // const plansKeyboard = new InlineKeyboard()
+    //   .url("Tier 1 for 1 month: $10", process.env.STRIPE_CHECKOUT_URL_TIER1_1MO)
+    //   .url("Tier 2 for 1 month: $20", process.env.STRIPE_CHECKOUT_URL_TIER2_1MO)
+    //   .url("Tier 3 for 1 month: $40", process.env.STRIPE_CHECKOUT_URL_TIER3_1MO)
+    //   .row()
+    //   .url("Tier 1 for 3 months: $25", process.env.STRIPE_CHECKOUT_URL_TIER1_3MO)
+    //   .url("Tier 2 for 3 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER2_3MO)
+    //   .url("Tier 3 for 3 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER3_3MO)
+    //   .row()
+    //   .url("Tier 1 for 6 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER1_6MO)
+    //   .url("Tier 2 for 6 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER2_6MO)
+    //   .url("Tier 3 for 6 months: $200", process.env.STRIPE_CHECKOUT_URL_TIER3_6MO)
+    //   .row()
+    //   .text("Back to menu", "/menu");
 
-  //   const session = await stripe.checkout.sessions.create({
-  //     payment_method_types: ['card'],
-  //     line_items: [
-  //       {
-  //         price: c.get('stripe.priceId'),
-  //         quantity: 1,
-  //       },
-  //     ],
-  //     mode: 'subscription',
-  //     success_url: `${c.get('stripe.successUrl')}`,
-  //     cancel_url: `${c.get('stripe.cancelUrl')}`,
-  //     customer_email: ctx.session.userEmail,
-  //   });
-  //   // send stripe session id to user
-  //   ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
+    // await ctx.reply("Please select a subscription tier:", {
+    //   reply_markup: plansKeyboard,
+    // });
   } catch (error) {
     console.log(`❌ Error subscribing user: ${error.message}`);
     console.log(error.stack);
@@ -807,8 +811,8 @@ async function drawMainMenu(ctx) {
 
 // Function to draw main menu
 async function drawSubscribeMenu(ctx) {
-  const currentTier = ctx.session.tier;
-  const scanPeriod = SCAN_PERIODS[currentTier] || 0; // Default to 0 if tier is not recognized
+  const currentTier = patrolData.get(ctx.message.chat.id).tier;
+  const scanPeriod = SCAN_PERIODS["Tier "+ currentTier]; // Default to 0 if tier is not recognized
   const subscribeMenu = new Keyboard()
   .text("/subscribe 💵")
   .text("/contact 📧").row()
@@ -817,12 +821,12 @@ async function drawSubscribeMenu(ctx) {
   .resized() 
   if (ctx.session.expDate < new Date().toISOString()) {
     ctx.reply(
-      `Your subscription has expired on ${ctx.session.expDate}. Please select an option`,
+      `Your subscription has expired. Please select an option:`,
       { reply_markup: subscribeMenu }
     );
   } else {
     ctx.reply(
-      `Your subscription expires on ${ctx.session.expDate}. Your current subscription tier is ${currentTier} (scan every ${scanPeriod} seconds). Please select an option`,
+      `Your subscription expires on ${patrolData.get(ctx.message.chat.id).expDate}. Your current subscription tier is ${currentTier} (scan every ${scanPeriod} seconds). Please select an option:`,
       { reply_markup: subscribeMenu }
   ); 
 }

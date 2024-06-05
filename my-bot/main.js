@@ -811,27 +811,37 @@ async function drawMainMenu(ctx) {
 
 // Function to draw main menu
 async function drawSubscribeMenu(ctx) {
-  const currentTier = patrolData.get(ctx.message.chat.id).tier;
-  const scanPeriod = SCAN_PERIODS["Tier "+ currentTier]; // Default to 0 if tier is not recognized
-  const subscribeMenu = new Keyboard()
-  .text("/subscribe 💵")
-  .text("/contact 📧").row()
-  .text("/menu 📃")
-  .persistent()
-  .resized() 
-  if (ctx.session.expDate < new Date().toISOString()) {
-    ctx.reply(
-      `Your subscription has expired. Please select an option:`,
-      { reply_markup: subscribeMenu }
-    );
-  } else {
-    ctx.reply(
-      `Your subscription expires on ${patrolData.get(ctx.message.chat.id).expDate}. Your current subscription tier is ${currentTier} (scan every ${scanPeriod} seconds). Please select an option:`,
-      { reply_markup: subscribeMenu }
-  ); 
+  //const currentTier = patrolData.get(ctx.message.chat.id).tier;
+  //make a db call to get the current tier
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  db.all(`SELECT tier, expDate FROM Users WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
+    if (err) {
+      console.log(err);
+    } else {
+      const currentTier = rows[0].tier;
+      const expDate = rows[0].expDate;
+      const scanPeriod = SCAN_PERIODS["Tier "+ currentTier]; // Default to 0 if tier is not recognized
+      const subscribeMenu = new Keyboard()
+      .text("/subscribe 💵")
+      .text("/contact 📧").row()
+      .text("/menu 📃")
+      .persistent()
+      .resized() 
+      if (expDate < new Date().toISOString()) {
+        ctx.reply(
+          `Your subscription has expired. Please select an option:`,
+          { reply_markup: subscribeMenu }
+        );
+      } else {
+        ctx.reply(
+          `Your subscription expires on ${expDate}. Your current subscription tier is ${currentTier} (scan every ${scanPeriod} seconds). Please select an option:`,
+          { reply_markup: subscribeMenu }
+      ); 
+    }
+  }
+  });
+  db.close();
 }
-}
-
 
 } catch (err) {
   console.log(`❌ Global Error starting patrol: ${err.message}`);

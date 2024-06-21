@@ -63,10 +63,11 @@ const SCAN_PERIODS = {
 
 try {
   bot.use(session({ initial: createInitialSessionData }));
-  bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
+  bot.use(conversations(collectUserEmail, addLink, subscribeUser));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
-
+  bot.use(createConversation(subscribeUser));
+  
   puppeteer.use(StealthPlugin());
 
   // Launch Puppeteer
@@ -107,7 +108,7 @@ try {
   });
 
 
-  //bot.use(createConversation(subscribeUser));
+
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
     JOIN Links ON Users.chatID = Links.chatID
@@ -238,7 +239,7 @@ bot.command("subscription", async (ctx) => {
 // Command to subscribe to the bot
 bot.command("subscribe", async (ctx) => {
   try {
-    ctx.conversation.enter("subscribeUser");
+    await ctx.conversation.enter("subscribeUser");
   } catch (error) {
     console.log(`❌ Error subscribing user: ${error.message}`);
     console.log(error.stack);
@@ -660,31 +661,32 @@ async function addLink(conversation, ctx) {
 // conversation handler to subscribe user with stripe good-better-best pricing
 async function subscribeUser(conversation, ctx) {
   try {
+    // show client buttons with 9 links to stripe checkout
+    const plansKeyboard = new Keyboard()
+      .text("Tier 1 for 1 month: $10", process.env.STRIPE_CHECKOUT_URL_TIER1_1MO)
+      .text("Tier 2 for 1 month: $20", process.env.STRIPE_CHECKOUT_URL_TIER2_1MO)
+      .text("Tier 3 for 1 month: $40", process.env.STRIPE_CHECKOUT_URL_TIER3_1MO)
+      .row()
+      .text("Tier 1 for 3 months: $25", process.env.STRIPE_CHECKOUT_URL_TIER1_3MO)
+      .text("Tier 2 for 3 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER2_3MO)
+      .text("Tier 3 for 3 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER3_3MO)
+      .row()
+      .text("Tier 1 for 6 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER1_6MO)
+      .text("Tier 2 for 6 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER2_6MO)
+      .text("Tier 3 for 6 months: $200", process.env.STRIPE_CHECKOUT_URL_TIER3_6MO)
+      .row()
+      .text("/menu");
 
-    // // show client buttons with 9 links to stripe checkout
-    // const plansKeyboard = new InlineKeyboard()
-    //   .url("Tier 1 for 1 month: $10", process.env.STRIPE_CHECKOUT_URL_TIER1_1MO)
-    //   .url("Tier 2 for 1 month: $20", process.env.STRIPE_CHECKOUT_URL_TIER2_1MO)
-    //   .url("Tier 3 for 1 month: $40", process.env.STRIPE_CHECKOUT_URL_TIER3_1MO)
-    //   .row()
-    //   .url("Tier 1 for 3 months: $25", process.env.STRIPE_CHECKOUT_URL_TIER1_3MO)
-    //   .url("Tier 2 for 3 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER2_3MO)
-    //   .url("Tier 3 for 3 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER3_3MO)
-    //   .row()
-    //   .url("Tier 1 for 6 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER1_6MO)
-    //   .url("Tier 2 for 6 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER2_6MO)
-    //   .url("Tier 3 for 6 months: $200", process.env.STRIPE_CHECKOUT_URL_TIER3_6MO)
-    //   .row()
-    //   .text("Back to menu", "/menu");
-
-    // await ctx.reply("Please select a subscription tier:", {
-    //   reply_markup: plansKeyboard,
-    // });
+    await ctx.reply("Please select a subscription tier:", {
+      reply_markup: plansKeyboard,
+    });
   } catch (error) {
     console.log(`❌ Error subscribing user: ${error.message}`);
     console.log(error.stack);
   }
 }
+
+
 
 
 async function createInitialSetsForPatrol(chatID, browser) {
@@ -834,7 +836,7 @@ async function drawSubscribeMenu(ctx) {
         );
       } else {
         ctx.reply(
-          `Your subscription expires on ${expDate}. Your current subscription tier is ${currentTier} (scan every ${scanPeriod} seconds). Please select an option:`,
+          `Your subscription expires on ${expDate}. Your current subscription tier is Tier${currentTier} (scan every ${scanPeriod} seconds). Please select an option:`,
           { reply_markup: subscribeMenu }
       ); 
     }

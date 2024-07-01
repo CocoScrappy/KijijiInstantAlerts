@@ -53,12 +53,21 @@ const blockResourceName = [
   'tiqcdn',
   'zedo',
 ];
+
+const SCAN_PERIODS = {
+  "Tier 0": 15,
+  "Tier 1": 120,
+  "Tier 2": 60,
+  "Tier 3": 15
+};
+
 try {
   bot.use(session({ initial: createInitialSessionData }));
-  bot.use(conversations(collectUserEmail, addLink/*, subscribeUser*/));
+  bot.use(conversations(collectUserEmail, addLink, subscribeUser));
   bot.use(createConversation(collectUserEmail));
   bot.use(createConversation(addLink));
-
+  bot.use(createConversation(subscribeUser));
+  
   puppeteer.use(StealthPlugin());
 
   // Launch Puppeteer
@@ -99,7 +108,7 @@ try {
   });
 
 
-  //bot.use(createConversation(subscribeUser));
+
   const rows = await new Promise((resolve, reject) => {
     db.all(`SELECT Users.chatID, expDate, url, tier FROM Users
     JOIN Links ON Users.chatID = Links.chatID
@@ -171,11 +180,11 @@ bot.command("start", async (ctx) => {
     ctx.session.userLinks = [];
     ctx.session.expDate = "";
     await ctx.reply("Welcome to Kijiji Patrol Bot 🕵️‍♂️\n"+
-    "\nEverybody knows that good deals don't last long on Kijiji - delay responding by several minutes and somebody else already arranged to meet the seller.😔 BUT!\n" +
-    "\nYou can use me to solve this problem.😉 Whether you are looking for a new apartment, a vehicle or anything in between - I will monitor kijiji for you and notify you instantly once an ad that meets your criteria is posted.⚡" +
-    "\nIf used wisely, I can help you save hundreds of dollars. \n" +
-    "\nTry me out free for a month. You can buy additional time when you need, starting at $10/mo.\n" +
-    "\n➡️ To start, please provide Email address you could be reached at if needed:");
+    "\nGood deals don't last long on Kijiji - delay responding by 5 minutes and somebody already arranged to meet the seller.😔\n" +
+    "Use me to solve this problem! 😉 " +
+    "\nLooking for a new apartment to rent, a vehicle or anything in between? -> I will scan Kijiji and notify you instantly once someone posts something that meets your search criteria.⚡" +
+    "\nCompletely free for 2 months then you can get additional time when you need.\n" +
+    "\n\n➡️ To start, enter email address:");
     await ctx.conversation.enter("collectUserEmail");
 
   }
@@ -202,22 +211,35 @@ bot.command("menu", async (ctx) => {
 });
 
 // Command to subscribe to the bot
-bot.command("subscribe", async (ctx) => {
+bot.command("subscription", async (ctx) => {
   try {
     //check if chat is private
-    // if (ctx.chat.type === "private") {
-    //   checkIfUserExists(ctx.message.chat.id).then(async (exists) => {
-    //     if (exists) {
-    //       return;
-    //     } else {
-    //       ctx.reply("Oops, you are not registered. Please provide an email address in case we need to contact you or troubleshoot an issue:");
-    //       await ctx.conversation.enter("collectUserEmail");
-    //     }
-    //   });
-    //   //await ctx.conversation.enter("subscribeUser");
-    // } else {
-    //   ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
-    // }
+    if (ctx.chat.type === "private") {
+      checkIfUserExists(ctx.message.chat.id).then(async (exists) => {
+        if (exists) {
+          console.log("User exists. Drawing subscribe menu...");
+          drawSubscribeMenu(ctx);
+          return;
+        } else {
+          ctx.reply("Oops, you are not registered. Please provide an email address in case we need to contact you or troubleshoot an issue:");
+          await ctx.conversation.enter("collectUserEmail");
+          console.log("User does not exist. Drawing subscribe menu...");
+          drawSubscribeMenu(ctx);
+        }
+      });
+    } else {
+      ctx.reply("Channels and groups are not currently supported. Add me to a private chat to get started.");
+    }
+  } catch (error) {
+    console.log(`❌ Error subscribing user: ${error.message}`);
+    console.log(error.stack);
+  }
+});
+
+// Command to subscribe to the bot
+bot.command("subscribe", async (ctx) => {
+  try {
+    await ctx.conversation.enter("subscribeUser");
   } catch (error) {
     console.log(`❌ Error subscribing user: ${error.message}`);
     console.log(error.stack);
@@ -455,7 +477,7 @@ async function checkIfUserExists(chatID) {
                   } else {
                       resolve(rows.length > 0);
                   }
-                  db.close();
+                  // db.close();
               }
           );
       } catch (error) {
@@ -637,32 +659,34 @@ async function addLink(conversation, ctx) {
 }
 
 // conversation handler to subscribe user with stripe good-better-best pricing
-// async function subscribeUser(conversation, ctx) {
-//   try {
-//     // show client pricing table in the bot using html markup provided by stripe
-//     ctx.replyWithHTML(c.get('stripe.pricingTable'));
+async function subscribeUser(conversation, ctx) {
+  try {
+    // show client buttons with 9 links to stripe checkout
+    const plansKeyboard = new Keyboard()
+      .text("Tier 1 for 1 month: $10", process.env.STRIPE_CHECKOUT_URL_TIER1_1MO)
+      .text("Tier 2 for 1 month: $20", process.env.STRIPE_CHECKOUT_URL_TIER2_1MO)
+      .text("Tier 3 for 1 month: $40", process.env.STRIPE_CHECKOUT_URL_TIER3_1MO)
+      .row()
+      .text("Tier 1 for 3 months: $25", process.env.STRIPE_CHECKOUT_URL_TIER1_3MO)
+      .text("Tier 2 for 3 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER2_3MO)
+      .text("Tier 3 for 3 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER3_3MO)
+      .row()
+      .text("Tier 1 for 6 months: $50", process.env.STRIPE_CHECKOUT_URL_TIER1_6MO)
+      .text("Tier 2 for 6 months: $100", process.env.STRIPE_CHECKOUT_URL_TIER2_6MO)
+      .text("Tier 3 for 6 months: $200", process.env.STRIPE_CHECKOUT_URL_TIER3_6MO)
+      .row()
+      .text("/menu");
+
+    await ctx.reply("Please select a subscription tier:", {
+      reply_markup: plansKeyboard,
+    });
+  } catch (error) {
+    console.log(`❌ Error subscribing user: ${error.message}`);
+    console.log(error.stack);
+  }
+}
 
 
-//     const session = await stripe.checkout.sessions.create({
-//       payment_method_types: ['card'],
-//       line_items: [
-//         {
-//           price: c.get('stripe.priceId'),
-//           quantity: 1,
-//         },
-//       ],
-//       mode: 'subscription',
-//       success_url: `${c.get('stripe.successUrl')}`,
-//       cancel_url: `${c.get('stripe.cancelUrl')}`,
-//       customer_email: ctx.session.userEmail,
-//     });
-//     // send stripe session id to user
-//     ctx.reply(`Please click on the link below to subscribe: \n${session.url}`);
-//   } catch (error) {
-//     console.log(`❌ Error subscribing user: ${error.message}`);
-//     console.log(error.stack);
-//   }
-// }
 
 
 async function createInitialSetsForPatrol(chatID, browser) {
@@ -778,7 +802,7 @@ async function drawMainMenu(ctx) {
   .text("/addlink ➕").row()
   .text("/patrol 🕵️‍♂️")
   .text("/stop 🛑")
-  .text("/subscribe 💵").row()
+  .text("/subscription 💵").row()
   .persistent()
   .resized() 
   ctx.reply(
@@ -787,6 +811,39 @@ async function drawMainMenu(ctx) {
   ); 
 }
 
+// Function to draw main menu
+async function drawSubscribeMenu(ctx) {
+  //const currentTier = patrolData.get(ctx.message.chat.id).tier;
+  //make a db call to get the current tier
+  let db = new sqlite3.Database('./db/KijijiAlerter_db.db');
+  db.all(`SELECT tier, expDate FROM Users WHERE chatID = ${ctx.message.chat.id}`, (err, rows) => {
+    if (err) {
+      console.log(err);
+    } else {
+      const currentTier = rows[0].tier;
+      const expDate = rows[0].expDate;
+      const scanPeriod = SCAN_PERIODS["Tier "+ currentTier]; // Default to 0 if tier is not recognized
+      const subscribeMenu = new Keyboard()
+      .text("/subscribe 💵")
+      .text("/contact 📧").row()
+      .text("/menu 📃")
+      .persistent()
+      .resized() 
+      if (expDate < new Date().toISOString()) {
+        ctx.reply(
+          `Your subscription has expired. Please select an option:`,
+          { reply_markup: subscribeMenu }
+        );
+      } else {
+        ctx.reply(
+          `Your subscription expires on ${expDate}. Your current subscription tier is Tier${currentTier} (scan every ${scanPeriod} seconds). Please select an option:`,
+          { reply_markup: subscribeMenu }
+      ); 
+    }
+  }
+  });
+  db.close();
+}
 
 } catch (err) {
   console.log(`❌ Global Error starting patrol: ${err.message}`);

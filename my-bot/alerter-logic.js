@@ -31,6 +31,9 @@ export async function checkURLs(links, browser) {
 async function huntForChanges(userLink, browser) {
   try {
     const topID = await fetchLink(userLink, browser);
+    console.log(`🔍 Checking ${userLink.url} for changes..`+
+    `Top ID: ${topID}`
+    );
     if (!topID) {
       throw new Error(`❌ Could not fetch ${userLink.url}`);
     }
@@ -72,7 +75,9 @@ export const parseForTopID = ($, userLink) => {
     const ulElements = $('ul[data-testid="srp-search-list"]');
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
-      const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
+      //const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
+      const targetListing = targetUl.find('section[data-testid="listing-card"]').eq(0);
+      
       const prices = targetUl.find('p[data-testid*="listing-price"]');
       const href = targetListing.find('a[data-testid="listing-link"]').eq(0).attr("href");
       const liItem = targetListing.find('ul[data-testid*="list-non-mobile"]').children('li');
@@ -113,7 +118,8 @@ export const generateInitialSetForPatrol = ($, userLink) => {
 
     if (ulElements.length > 0) {
       const targetUl = ulElements.length > 1 ? ulElements.eq(1) : ulElements.eq(0);
-      const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
+      //const targetListing = targetUl.find('li[data-testid="listing-card-list-item-0"]').eq(0);
+      const targetListing = targetUl.find('section[data-testid="listing-card"]').eq(0);
       const prices = targetUl.find('p[data-testid*="listing-price"]');
       const liItem = targetListing.find('ul[data-testid*="list-non-mobile"]').children('li');
       const divItem = targetListing.find('div[data-testid*="autos-attribute"]').children('p');
